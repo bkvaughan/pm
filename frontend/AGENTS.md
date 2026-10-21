@@ -18,7 +18,7 @@ This directory contains the Next.js frontend for the PM MVP. It is the current d
 
 - src/app/page.tsx: app entry point that renders the main board
 - src/components/LoginGate.tsx: fake username/password gate and logout action
-- src/components/KanbanBoard.tsx: top-level board state and drag/drop orchestration
+- src/components/KanbanBoard.tsx: board API loading, state, persistence queue, and drag/drop orchestration
 - src/components/KanbanColumn.tsx: column UI and droppable area
 - src/components/KanbanCard.tsx: card rendering and sortable behavior
 - src/components/NewCardForm.tsx: inline card-creation form
@@ -37,7 +37,8 @@ The current frontend is a single-page Kanban board demo:
 - Cards can be dragged between columns and reorder within a column.
 - Users can add a card via a small form inside each column.
 - Users can remove a card from the current column.
-- The board state is kept in React local state instead of a backend database.
+- The board loads from `GET /api/board` and saves changes to `PUT /api/board`.
+- Edits are optimistic in the UI and queued in order; load and save errors are shown with retry for load failures.
 
 ## Core data model
 
@@ -61,7 +62,7 @@ The frontend uses two different test layers:
 
 1. Unit tests for board logic and component behavior
    - src/lib/kanban.test.ts checks moveCard behavior
-   - src/components/KanbanBoard.test.tsx checks rendering, renaming columns, and adding/removing cards
+   - src/components/KanbanBoard.test.tsx checks API loading, renaming, adding/removing, persistence, and error recovery
 
 2. Browser integration tests
    - tests/kanban.spec.ts checks the app loads, adds a card, and drags a card between columns

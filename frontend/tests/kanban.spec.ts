@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { initialData, type BoardData } from "../src/lib/kanban";
 
 const signIn = async (page: Page) => {
   await page.getByLabel("Username").fill("user");
@@ -6,7 +7,22 @@ const signIn = async (page: Page) => {
   await page.getByRole("button", { name: "Sign in" }).click();
 };
 
+const mockBoardApi = async (page: Page) => {
+  let board: BoardData = structuredClone(initialData);
+  await page.route("**/api/board", async (route) => {
+    if (route.request().method() === "PUT") {
+      board = route.request().postDataJSON() as BoardData;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(board),
+    });
+  });
+};
+
 test("requires valid credentials and supports logout", async ({ page }) => {
+  await mockBoardApi(page);
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Sign in to Kanban Studio" })).toBeVisible();
   await expect(page.locator('[data-testid^="column-"]')).toHaveCount(0);
@@ -27,6 +43,7 @@ test("requires valid credentials and supports logout", async ({ page }) => {
 });
 
 test("loads the kanban board", async ({ page }) => {
+  await mockBoardApi(page);
   await page.goto("/");
   await signIn(page);
   await expect(page.getByRole("heading", { name: "Kanban Studio" })).toBeVisible();
@@ -34,6 +51,7 @@ test("loads the kanban board", async ({ page }) => {
 });
 
 test("adds a card to a column", async ({ page }) => {
+  await mockBoardApi(page);
   await page.goto("/");
   await signIn(page);
   const firstColumn = page.locator('[data-testid^="column-"]').first();
@@ -45,6 +63,7 @@ test("adds a card to a column", async ({ page }) => {
 });
 
 test("moves a card between columns", async ({ page }) => {
+  await mockBoardApi(page);
   await page.goto("/");
   await signIn(page);
   const card = page.getByTestId("card-card-1");
@@ -65,6 +84,20 @@ test("moves a card between columns", async ({ page }) => {
     columnBox.y + 120,
     { steps: 12 }
   );
+  const savedBoard = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/board") &&
+      response.request().method() === "PUT"
+  );
   await page.mouse.up();
+  await expect(targetColumn.getByTestId("card-card-1")).toBeVisible();
+  await savedBoard;
+  await expect(page.getByTestId("board-save-status")).toHaveText("Saved");
+  await page.getByRole("button", { name: "Log out" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Sign in to Kanban Studio" })
+  ).toBeVisible();
+  await signIn(page);
+  await expect(page.getByRole("heading", { name: "Kanban Studio" })).toBeVisible();
   await expect(targetColumn.getByTestId("card-card-1")).toBeVisible();
 });

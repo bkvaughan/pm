@@ -159,21 +159,28 @@ Validation record:
 Goal: Replace the local-only state with persistent API-backed board state.
 
 Substeps:
-- [ ] Update the frontend to fetch board state from the backend after login.
-- [ ] Update create, move, rename, and delete actions to call backend endpoints.
-- [ ] Handle loading, error, and empty-state UI behavior cleanly.
-- [ ] Keep the current board UX while moving from local memory to server-backed state.
-- [ ] Run thorough validation of the full user flow across both layers.
+- [x] Update the frontend to fetch board state from the backend after login.
+- [x] Update create, move, rename, and delete actions to call backend endpoints.
+- [x] Handle loading and error UI behavior cleanly.
+- [x] Keep the current board UX while moving from local memory to server-backed state.
+- [x] Run thorough validation of the full user flow across both layers.
 
 Tests:
-- Frontend tests for successful fetch and update flows.
-- Integration tests covering add, move, rename, and delete operations using the API.
-- Error-path tests for failed API calls or unavailable backend responses.
+- [x] Frontend tests for successful fetch and update flows.
+- [x] Integration tests covering add, move, rename, and delete operations using the API.
+- [x] Error-path tests for failed API calls or unavailable backend responses.
 
 Success criteria:
-- The Kanban is persisted and remains correct after refresh.
-- The frontend and backend integrate without race conditions or broken board state.
-- The user experience remains simple and stable.
+- [x] The Kanban is persisted and remains correct after refresh.
+- [x] The frontend and backend integrate without race conditions or broken board state.
+- [x] The user experience remains simple and stable.
+
+Validation record:
+- Frontend unit tests: 11 passed, including board load/update, saved state, retry, and surfaced save errors.
+- Playwright E2E tests: 4 passed, including moving a card, saving it, logging out, and verifying it remains in the moved column after login.
+- Frontend lint and static production build passed.
+- Docker rebuild and live root/health smoke tests passed.
+- Live API persistence check moved a card between columns, confirmed GET returned the moved state, and restored the original local board afterward.
 
 ## Part 8: AI connectivity via OpenRouter
 

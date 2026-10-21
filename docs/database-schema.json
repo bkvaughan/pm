@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "database": "SQLite",
+  "tables": [
+    {
+      "name": "users",
+      "columns": [
+        { "name": "id", "type": "TEXT", "primary_key": true },
+        { "name": "username", "type": "TEXT", "not_null": true, "unique": true }
+      ]
+    },
+    {
+      "name": "boards",
+      "columns": [
+        { "name": "id", "type": "TEXT", "primary_key": true },
+        {
+          "name": "user_id",
+          "type": "TEXT",
+          "not_null": true,
+          "unique": true,
+          "references": "users.id",
+          "on_delete": "CASCADE"
+        }
+      ]
+    },
+    {
+      "name": "board_columns",
+      "columns": [
+        { "name": "id", "type": "TEXT", "primary_key": true },
+        {
+          "name": "board_id",
+          "type": "TEXT",
+          "not_null": true,
+          "references": "boards.id",
+          "on_delete": "CASCADE"
+        },
+        { "name": "title", "type": "TEXT", "not_null": true },
+        { "name": "position", "type": "INTEGER", "not_null": true }
+      ],
+      "constraints": [
+        { "type": "unique", "columns": ["board_id", "id"] },
+        { "type": "unique", "columns": ["board_id", "position"] }
+      ]
+    },
+    {
+      "name": "cards",
+      "columns": [
+        { "name": "id", "type": "TEXT", "primary_key": true },
+        { "name": "board_id", "type": "TEXT", "not_null": true },
+        { "name": "column_id", "type": "TEXT", "not_null": true },
+        { "name": "title", "type": "TEXT", "not_null": true },
+        { "name": "details", "type": "TEXT", "not_null": true },
+        { "name": "position", "type": "INTEGER", "not_null": true }
+      ],
+      "constraints": [
+        {
+          "type": "foreign_key",
+          "columns": ["board_id", "column_id"],
+          "references": ["board_columns.board_id", "board_columns.id"],
+          "on_delete": "CASCADE"
+        },
+        { "type": "unique", "columns": ["column_id", "position"] }
+      ]
+    }
+  ]
+}

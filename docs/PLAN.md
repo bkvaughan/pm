@@ -104,45 +104,55 @@ Validation record:
 Goal: Define the persistence model for the Kanban board and record it in the repo for review.
 
 Substeps:
-- [ ] Identify the minimum data model required for users, boards, columns, and cards.
-- [ ] Design a SQLite-friendly schema that supports future multi-user expansion without overbuilding.
-- [ ] Save the schema as a JSON file under docs/ or another agreed location.
-- [ ] Document how the schema maps to the current board, card, and column concepts.
-- [ ] Get explicit user sign-off before implementing database-backed routes.
+- [x] Identify the minimum data model required for users, boards, columns, and cards.
+- [x] Design a SQLite-friendly schema that supports future multi-user expansion without overbuilding.
+- [x] Save the schema as a JSON file under docs/ or another agreed location.
+- [x] Document how the schema maps to the current board, card, and column concepts.
+- [x] Get explicit user sign-off before implementing database-backed routes.
 
 Tests:
-- Validate the schema JSON is parseable and internally consistent.
-- Confirm the schema covers the current MVP requirements without adding unnecessary complexity.
-- Confirm the model can support future multiple users yet remains simple for the MVP.
+- [x] Validate the schema JSON is parseable and internally consistent.
+- [x] Confirm the schema covers the current MVP requirements without adding unnecessary complexity.
+- [x] Confirm the model can support future multiple users yet remains simple for the MVP.
 
 Success criteria:
-- Database schema is documented and approved.
-- The schema matches the current Kanban data shape and user limitation.
-- There is no hidden scope creep beyond the MVP requirements.
+- [x] Database schema is documented and approved.
+- [x] The schema matches the current Kanban data shape and user limitation.
+- [x] There is no hidden scope creep beyond the MVP requirements.
+
+Validation record:
+- `python3 -m json.tool docs/database-schema.json`: passed.
+- Manual review confirmed the one-board-per-user constraint, persisted column/card ordering, and same-board column/card relationship.
+- User approved the schema on 2026-10-21.
 
 ## Part 6: Backend API and persistence layer
 
 Goal: Implement backend routes that can read and write the Kanban board for a logged-in user, and create the database automatically if absent.
 
 Substeps:
-- [ ] Add SQLite database initialization and connection setup.
-- [ ] Create schema migration or startup initialization logic.
-- [ ] Define routes to fetch the current board for the signed-in user.
-- [ ] Define routes to update board structure, rename columns, add cards, move cards, and delete cards.
-- [ ] Ensure the backend handles basic validation of payloads.
-- [ ] Write backend unit tests for the main board actions.
-- [ ] Make sure the app works when the database file does not already exist.
+- [x] Add SQLite database initialization and connection setup.
+- [x] Create schema migration or startup initialization logic.
+- [x] Define routes to fetch the current board for the signed-in user.
+- [x] Define routes to update board structure, rename columns, add cards, move cards, and delete cards.
+- [x] Ensure the backend handles basic validation of payloads.
+- [x] Write backend unit tests for the main board actions.
+- [x] Make sure the app works when the database file does not already exist.
 
 Tests:
-- Unit tests for board fetch and save actions.
-- Unit tests for moving cards and renaming columns.
-- Unit tests for initializing an empty database.
-- Validate error handling for malformed requests.
+- [x] Unit tests for board fetch and save actions.
+- [x] Unit tests for moving cards and renaming columns.
+- [x] Unit tests for initializing an empty database.
+- [x] Validate error handling for malformed requests.
 
 Success criteria:
-- The backend reliably stores and retrieves board state.
-- Database creation is automatic.
-- Core board operations are covered by tests and pass reliably.
+- [x] The backend reliably stores and retrieves board state.
+- [x] Database creation is automatic.
+- [x] Core board operations are covered by tests and pass reliably.
+
+Validation record:
+- Backend tests: 6 passed, covering API smoke routes, automatic DB creation and seed, renaming, add/move/delete board updates, persistence, and malformed board rejection.
+- Python compile check: passed.
+- Docker rebuild passed; root sign-in page, `/health`, `/api/hello`, and board GET/PUT/GET persistence verified against the running container.
 
 ## Part 7: Frontend-to-backend integration
 

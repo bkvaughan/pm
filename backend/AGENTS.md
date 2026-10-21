@@ -2,11 +2,11 @@
 
 ## Purpose
 
-This directory contains the FastAPI backend for the PM MVP. It is intentionally minimal at this stage and is responsible for hosting the app runtime, returning a simple hello-world HTML page, and exposing an API endpoint for smoke checks.
+This directory contains the FastAPI backend for the PM MVP. It serves the static frontend, exposes health and board API routes, and persists the demo user's Kanban board in SQLite.
 
 ## Current state
 
-The backend is in the initial scaffolding phase. It is not yet connected to the database or AI features, and it does not yet serve the frontend build. The current focus is to confirm that the app can start cleanly, respond over HTTP, and provide a stable foundation for later phases.
+The backend now initializes the SQLite schema on first board access and seeds the demo user's first board. Board reads and full-board updates use the API's existing frontend-compatible JSON shape. AI routes are not implemented yet.
 
 ## Stack
 
@@ -17,28 +17,21 @@ The backend is in the initial scaffolding phase. It is not yet connected to the 
 
 ## Current routes
 
-- /: returns a simple HTML page with a hello-world message
+- /: serves the static frontend when its export is available
 - /api/hello: returns a JSON payload with a success message
 - /health: returns the service status for health checks
+- GET /api/board: returns the demo user's board
+- PUT /api/board: validates and replaces the demo user's board
 
 ## Development commands
 
-From this directory:
+From the repository root:
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install "fastapi>=0.115.0" "uvicorn[standard]>=0.30.0" "pytest>=8.3.0" "httpx>=0.27.0"
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+uv run --project backend uvicorn app.main:app --app-dir backend --reload --host 0.0.0.0 --port 8000
+uv run --project backend pytest backend/tests
 ```
 
 ## Validation
 
-A focused backend smoke test should verify:
-
-- the root route returns HTML successfully
-- the hello API route returns the expected JSON
-- the health endpoint responds correctly
-
-Do not over-engineer this phase. The goal is a stable local runtime and a clean starting point for the database and AI work that follows.
+Backend tests cover static root serving, health routes, automatic SQLite creation, initial seed data, board updates, persistence, and invalid card membership. The runtime database is stored in `data/` locally and mounted at `/app/data` in Docker.

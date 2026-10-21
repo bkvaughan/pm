@@ -7,6 +7,8 @@ npm install
 npm run dev
 ```
 
+Sign in with username `user` and password `password`.
+
 ## Tests
 
 ```bash

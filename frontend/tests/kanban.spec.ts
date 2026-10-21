@@ -300,3 +300,54 @@ test("moves a card from a full Review column into empty Done", async ({
   await savedBoard;
   await expect(targetColumn.getByTestId("card-card-6")).toBeVisible();
 });
+
+test("AI chat applies a board update and persists it", async ({ page }) => {
+  const board = structuredClone(initialData);
+  await mockBoardApi(page, board);
+  await page.route("**/api/ai/assistant", async (route) => {
+    const request = route.request().postDataJSON() as {
+      board: BoardData;
+      message: string;
+      history: unknown[];
+    };
+    expect(request.message).toBe("Move the roadmap card to Discovery.");
+    expect(request.history).toEqual([]);
+    expect(request.board.columns[0].cardIds).toContain("card-1");
+
+    const updatedBoard = structuredClone(request.board);
+    updatedBoard.columns[0].cardIds =
+      updatedBoard.columns[0].cardIds.filter((id) => id !== "card-1");
+    updatedBoard.columns[1].cardIds.push("card-1");
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        reply: "Moved the roadmap card to Discovery.",
+        board: updatedBoard,
+        model: "test-model",
+      }),
+    });
+  });
+
+  await page.goto("/");
+  await signIn(page);
+
+  const targetColumn = page.getByTestId("column-col-discovery");
+  await expect(page.getByTestId("card-card-1")).toBeVisible();
+  await page.getByLabel("Message the assistant").fill(
+    "Move the roadmap card to Discovery."
+  );
+  const savedBoard = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/board") &&
+      response.request().method() === "PUT"
+  );
+  await page.getByRole("button", { name: "Send" }).click();
+
+  await expect(
+    page.getByText("Moved the roadmap card to Discovery.")
+  ).toBeVisible();
+  await expect(targetColumn.getByTestId("card-card-1")).toBeVisible();
+  await savedBoard;
+  await expect(page.getByTestId("board-save-status")).toHaveText("Saved");
+});

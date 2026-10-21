@@ -16,6 +16,7 @@ import {
 } from "@dnd-kit/core";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
+import { AIChatSidebar } from "@/components/AIChatSidebar";
 import { createId, moveCard, type BoardData } from "@/lib/kanban";
 
 export const KanbanBoard = () => {
@@ -247,6 +248,10 @@ export const KanbanBoard = () => {
     }));
   };
 
+  const handleAssistantBoardUpdate = (nextBoard: BoardData) => {
+    updateBoard(() => nextBoard);
+  };
+
   const activeCard = activeCardId ? cardsById[activeCardId] : null;
 
   if (loadError) {
@@ -283,8 +288,9 @@ export const KanbanBoard = () => {
       <div className="pointer-events-none absolute left-0 top-0 h-[420px] w-[420px] -translate-x-1/3 -translate-y-1/3 rounded-full bg-[radial-gradient(circle,_rgba(32,157,215,0.25)_0%,_rgba(32,157,215,0.05)_55%,_transparent_70%)]" />
       <div className="pointer-events-none absolute bottom-0 right-0 h-[520px] w-[520px] translate-x-1/4 translate-y-1/4 rounded-full bg-[radial-gradient(circle,_rgba(117,57,145,0.18)_0%,_rgba(117,57,145,0.05)_55%,_transparent_75%)]" />
 
-      <main className="relative mx-auto flex min-h-screen max-w-[1500px] flex-col gap-10 px-6 pb-16 pt-12">
-        <header className="flex flex-col gap-6 rounded-[32px] border border-[var(--stroke)] bg-white/80 p-8 shadow-[var(--shadow)] backdrop-blur">
+      <div className="relative mx-auto grid min-h-screen max-w-[2000px] gap-6 px-6 pb-16 pt-8 2xl:grid-cols-[minmax(0,1fr)_360px]">
+        <main className="flex min-w-0 flex-col gap-10">
+          <header className="flex flex-col gap-6 rounded-[32px] border border-[var(--stroke)] bg-white/80 p-8 shadow-[var(--shadow)] backdrop-blur">
           <div className="flex flex-wrap items-start justify-between gap-6">
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.35em] text-[var(--gray-text)]">
@@ -330,43 +336,54 @@ export const KanbanBoard = () => {
               </div>
             ))}
           </div>
-        </header>
+          </header>
 
-        <DndContext
-          sensors={sensors}
-          collisionDetection={detectCollision}
-          onDragStart={handleDragStart}
-          onDragOver={handleDragOver}
-          onDragEnd={handleDragEnd}
-          onDragCancel={handleDragCancel}
-        >
-          <section className="grid gap-6 lg:grid-cols-5">
-            {board.columns.map((column) => (
-              <KanbanColumn
-                key={column.id}
-                column={column}
-                cards={column.cardIds.map((cardId) => board.cards[cardId])}
-                isDropTarget={dropTargetColumnId === column.id}
-                onRename={handleRenameColumn}
-                onAddCard={handleAddCard}
-                onDeleteCard={handleDeleteCard}
-              />
-            ))}
-          </section>
-          <DragOverlay
-            dropAnimation={{
-              duration: 180,
-              easing: "cubic-bezier(0.2, 0, 0, 1)",
-            }}
+          <DndContext
+            sensors={sensors}
+            collisionDetection={detectCollision}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDragEnd={handleDragEnd}
+            onDragCancel={handleDragCancel}
           >
-            {activeCard ? (
-              <div style={activeCardWidth ? { width: activeCardWidth } : undefined}>
-                <KanbanCardPreview card={activeCard} />
-              </div>
-            ) : null}
-          </DragOverlay>
-        </DndContext>
-      </main>
+            <div className="overflow-x-auto pb-4">
+              <section className="grid min-w-[1100px] grid-cols-5 gap-6">
+                {board.columns.map((column) => (
+                  <KanbanColumn
+                    key={column.id}
+                    column={column}
+                    cards={column.cardIds.map((cardId) => board.cards[cardId])}
+                    isDropTarget={dropTargetColumnId === column.id}
+                    onRename={handleRenameColumn}
+                    onAddCard={handleAddCard}
+                    onDeleteCard={handleDeleteCard}
+                  />
+                ))}
+              </section>
+            </div>
+            <DragOverlay
+              dropAnimation={{
+                duration: 180,
+                easing: "cubic-bezier(0.2, 0, 0, 1)",
+              }}
+            >
+              {activeCard ? (
+                <div
+                  style={
+                    activeCardWidth ? { width: activeCardWidth } : undefined
+                  }
+                >
+                  <KanbanCardPreview card={activeCard} />
+                </div>
+              ) : null}
+            </DragOverlay>
+          </DndContext>
+        </main>
+        <AIChatSidebar
+          board={board}
+          onBoardUpdate={handleAssistantBoardUpdate}
+        />
+      </div>
     </div>
   );
 };

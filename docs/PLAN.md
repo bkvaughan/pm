@@ -269,23 +269,28 @@ Validation record:
 Goal: Add the final user-facing AI chat experience, allow the AI to mutate the board, and refresh the UI automatically when changes occur.
 
 Substeps:
-- [ ] Add a sidebar chat widget to the frontend layout.
-- [ ] Support sending chat messages and displaying AI responses.
-- [ ] Connect the frontend to the AI-backed backend route.
-- [ ] Add client-side handling for board updates returned by the AI.
-- [ ] Refresh the board immediately after a valid AI mutation is applied.
-- [ ] Ensure the UI remains simple and polished without excessive complexity.
-- [ ] Validate the full happy path: ask, receive answer, update board, show changed board state.
+- [x] Add a sidebar chat widget to the frontend layout.
+- [x] Support sending chat messages and displaying AI responses.
+- [x] Connect the frontend to the AI-backed backend route.
+- [x] Add client-side handling for board updates returned by the AI.
+- [x] Refresh the board immediately after a valid AI mutation is applied.
+- [x] Ensure the UI remains simple and polished without excessive complexity.
+- [x] Validate the full happy path: ask, receive answer, update board, show changed board state.
 
 Tests:
-- Unit tests for sidebar rendering and chat message flow.
-- Integration tests for AI-driven board updates.
-- End-to-end tests that verify the board refreshes automatically after an AI update.
+- [x] Unit tests for sidebar rendering and chat message flow.
+- [x] Integration tests for AI-driven board updates.
+- [x] End-to-end tests that verify the board refreshes automatically after an AI update.
 
 Success criteria:
-- Users can chat with the AI in a sidebar.
-- AI updates to the board are applied automatically and visible immediately.
-- The final app meets the MVP business requirement for AI-assisted project management.
+- [x] Users can chat with the AI in a sidebar.
+- [x] AI updates to the board are applied automatically and visible immediately.
+- [x] The final app meets the MVP business requirement for AI-assisted project management.
+
+Validation record:
+- AI chat unit tests cover request payload/history, reply rendering, board-update callbacks, and surfaced backend errors.
+- Playwright verifies a requested card move is sent with board context, displayed in the board immediately, and persisted through the existing board API.
+- Frontend unit and browser tests, lint, and static production build passed.
 
 ## Execution note
 

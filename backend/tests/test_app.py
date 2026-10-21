@@ -1,11 +1,13 @@
 from collections.abc import Iterator
+import json
 from pathlib import Path
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
 from app import database
-from app.main import app
+from app.main import OPENROUTER_MODEL, OPENROUTER_URL, app
 
 
 @pytest.fixture
@@ -79,3 +81,101 @@ def test_put_board_rejects_cards_not_listed_in_exactly_one_column(
     response = client.put("/api/board", json=board)
 
     assert response.status_code == 422
+
+
+def test_ai_completion_sends_prompt_to_openrouter(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    original_async_client = httpx.AsyncClient
+
+    def openrouter_response(request: httpx.Request) -> httpx.Response:
+        assert str(request.url) == OPENROUTER_URL
+        assert request.headers["Authorization"] == "Bearer test-key"
+        assert json.loads(request.read()) == {
+            "model": OPENROUTER_MODEL,
+            "messages": [{"role": "user", "content": "2+2"}],
+        }
+        return httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": "4"}}]},
+        )
+
+    monkeypatch.setattr(
+        httpx,
+        "AsyncClient",
+        lambda **kwargs: original_async_client(
+            transport=httpx.MockTransport(openrouter_response),
+            **kwargs,
+        ),
+    )
+
+    response = client.post("/api/ai/completion", json={"prompt": "2+2"})
+
+    assert response.status_code == 200
+    assert response.json() == {"answer": "4", "model": OPENROUTER_MODEL}
+
+
+def test_ai_completion_reports_missing_api_key(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+
+    response = client.post("/api/ai/completion", json={"prompt": "2+2"})
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "OPENROUTER_API_KEY is not configured."
+
+
+@pytest.mark.parametrize("status_code", [401, 403])
+def test_ai_completion_reports_invalid_api_key(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+    status_code: int,
+) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "invalid-test-key")
+    original_async_client = httpx.AsyncClient
+
+    def rejected_key(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(status_code)
+
+    monkeypatch.setattr(
+        httpx,
+        "AsyncClient",
+        lambda **kwargs: original_async_client(
+            transport=httpx.MockTransport(rejected_key),
+            **kwargs,
+        ),
+    )
+
+    response = client.post("/api/ai/completion", json={"prompt": "2+2"})
+
+    assert response.status_code == 502
+    assert response.json()["detail"] == "OpenRouter rejected the API key."
+
+
+def test_ai_completion_reports_timeout(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    original_async_client = httpx.AsyncClient
+
+    def timeout(_: httpx.Request) -> httpx.Response:
+        raise httpx.ReadTimeout("test timeout")
+
+    monkeypatch.setattr(
+        httpx,
+        "AsyncClient",
+        lambda **kwargs: original_async_client(
+            transport=httpx.MockTransport(timeout),
+            **kwargs,
+        ),
+    )
+
+    response = client.post("/api/ai/completion", json={"prompt": "2+2"})
+
+    assert response.status_code == 504
+    assert response.json()["detail"] == "OpenRouter request timed out."

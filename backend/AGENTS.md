@@ -6,7 +6,7 @@ This directory contains the FastAPI backend for the PM MVP. It serves the static
 
 ## Current state
 
-The backend initializes the SQLite schema on first board access and seeds the demo user's first board. Board reads and full-board updates use the API's existing frontend-compatible JSON shape. The AI completion route proxies prompts to OpenRouter using the configured model.
+The backend initializes the SQLite schema on first board access and seeds the demo user's first board. Board reads and full-board updates use the API's existing frontend-compatible JSON shape. The AI completion and board-assistant routes proxy prompts to OpenRouter using the configured model.
 
 ## Stack
 
@@ -23,8 +23,10 @@ The backend initializes the SQLite schema on first board access and seeds the de
 - GET /api/board: returns the demo user's board
 - PUT /api/board: validates and replaces the demo user's board
 - POST /api/ai/completion: sends a text prompt to OpenRouter and returns its answer
+- POST /api/ai/assistant: sends the supplied board, message, and conversation history; returns a reply and optionally a validated, persisted board update
 
 The AI route requires `OPENROUTER_API_KEY` in the backend environment and times out after 30 seconds.
+The board assistant accepts explicit card creation, editing, and movement plus column renaming. Invalid model output or references are rejected without saving changes.
 
 ## Development commands
 
@@ -37,4 +39,4 @@ uv run --project backend pytest backend/tests
 
 ## Validation
 
-Backend tests cover static root serving, health routes, automatic SQLite creation, initial seed data, board updates, persistence, invalid card membership, and mocked OpenRouter success/error responses. The runtime database is stored in `data/` locally and mounted at `/app/data` in Docker.
+Backend tests cover static root serving, health routes, automatic SQLite creation, initial seed data, board updates, persistence, invalid card membership, and mocked OpenRouter success/error responses including structured assistant output and board mutations. The runtime database is stored in `data/` locally and mounted at `/app/data` in Docker.

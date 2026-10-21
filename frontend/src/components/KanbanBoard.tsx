@@ -5,10 +5,13 @@ import {
   DndContext,
   DragOverlay,
   PointerSensor,
+  closestCenter,
+  pointerWithin,
   useSensor,
   useSensors,
-  closestCorners,
+  type CollisionDetection,
   type DragEndEvent,
+  type DragOverEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
 import { KanbanColumn } from "@/components/KanbanColumn";
@@ -21,13 +24,17 @@ export const KanbanBoard = () => {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
+  const [activeCardWidth, setActiveCardWidth] = useState<number | null>(null);
+  const [dropTargetColumnId, setDropTargetColumnId] = useState<string | null>(
+    null
+  );
   const boardRef = useRef<BoardData | null>(null);
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
   const pendingSaves = useRef(0);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
-      activationConstraint: { distance: 6 },
+      activationConstraint: { distance: 5 },
     })
   );
 
@@ -92,14 +99,95 @@ export const KanbanBoard = () => {
   };
 
   const cardsById = useMemo(() => board?.cards ?? {}, [board?.cards]);
+  const detectCollision: CollisionDetection = (args) => {
+    const currentBoard = boardRef.current;
+    if (!currentBoard) {
+      return [];
+    }
+
+    const pointerCoordinates = args.pointerCoordinates;
+    const columnIds = new Set(currentBoard.columns.map((column) => column.id));
+    const pointerCollisions = pointerWithin(args);
+    const columnContainers = args.droppableContainers.filter(({ id }) =>
+      columnIds.has(String(id))
+    );
+    const pointerColumnCollision = pointerCollisions.find(({ id }) =>
+      columnIds.has(String(id))
+    );
+    const columnRects = columnContainers
+      .map(({ id }) => args.droppableRects.get(id))
+      .filter((rect): rect is NonNullable<typeof rect> => rect !== undefined);
+    const withinBoardBounds =
+      pointerCoordinates !== null &&
+      pointerCoordinates !== undefined &&
+      columnRects.length > 0 &&
+      pointerCoordinates.x >= Math.min(...columnRects.map(({ left }) => left)) &&
+      pointerCoordinates.x <= Math.max(...columnRects.map(({ right }) => right)) &&
+      pointerCoordinates.y >= Math.min(...columnRects.map(({ top }) => top)) &&
+      pointerCoordinates.y <= Math.max(...columnRects.map(({ bottom }) => bottom));
+    const nearestColumnCollision =
+      !pointerColumnCollision && pointerCoordinates && withinBoardBounds
+        ? closestCenter({
+            ...args,
+            collisionRect: {
+              left: pointerCoordinates.x,
+              right: pointerCoordinates.x,
+              top: pointerCoordinates.y,
+              bottom: pointerCoordinates.y,
+              width: 0,
+              height: 0,
+            },
+            droppableContainers: columnContainers,
+          })[0]
+        : undefined;
+    const columnCollision = pointerColumnCollision ?? nearestColumnCollision;
+
+    if (!columnCollision) {
+      return [];
+    }
+
+    const targetColumn = currentBoard.columns.find(
+      (column) => column.id === String(columnCollision.id)
+    );
+    if (!targetColumn) {
+      return [];
+    }
+
+    const cardIds = new Set(
+      targetColumn.cardIds.filter((cardId) => cardId !== String(args.active.id))
+    );
+    const cardCollisions = pointerCollisions.filter(({ id }) =>
+      cardIds.has(String(id))
+    );
+    return cardCollisions.length
+      ? closestCenter({
+          ...args,
+          droppableContainers: args.droppableContainers.filter(({ id }) =>
+            cardCollisions.some((collision) => collision.id === id)
+          ),
+        })
+      : [columnCollision];
+  };
 
   const handleDragStart = (event: DragStartEvent) => {
     setActiveCardId(event.active.id as string);
+    setActiveCardWidth(event.active.rect.current.initial?.width ?? null);
+  };
+
+  const handleDragOver = (event: DragOverEvent) => {
+    const overId = event.over ? String(event.over.id) : null;
+    const targetColumn = boardRef.current?.columns.find(
+      (column) =>
+        column.id === overId || column.cardIds.includes(overId ?? "")
+    );
+    setDropTargetColumnId(targetColumn?.id ?? null);
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     setActiveCardId(null);
+    setActiveCardWidth(null);
+    setDropTargetColumnId(null);
 
     if (!over || active.id === over.id) {
       return;
@@ -109,6 +197,12 @@ export const KanbanBoard = () => {
       ...current,
       columns: moveCard(current.columns, active.id as string, over.id as string),
     }));
+  };
+
+  const handleDragCancel = () => {
+    setActiveCardId(null);
+    setActiveCardWidth(null);
+    setDropTargetColumnId(null);
   };
 
   const handleRenameColumn = (columnId: string, title: string) => {
@@ -240,9 +334,11 @@ export const KanbanBoard = () => {
 
         <DndContext
           sensors={sensors}
-          collisionDetection={closestCorners}
+          collisionDetection={detectCollision}
           onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
           onDragEnd={handleDragEnd}
+          onDragCancel={handleDragCancel}
         >
           <section className="grid gap-6 lg:grid-cols-5">
             {board.columns.map((column) => (
@@ -250,15 +346,21 @@ export const KanbanBoard = () => {
                 key={column.id}
                 column={column}
                 cards={column.cardIds.map((cardId) => board.cards[cardId])}
+                isDropTarget={dropTargetColumnId === column.id}
                 onRename={handleRenameColumn}
                 onAddCard={handleAddCard}
                 onDeleteCard={handleDeleteCard}
               />
             ))}
           </section>
-          <DragOverlay>
+          <DragOverlay
+            dropAnimation={{
+              duration: 180,
+              easing: "cubic-bezier(0.2, 0, 0, 1)",
+            }}
+          >
             {activeCard ? (
-              <div className="w-[260px]">
+              <div style={activeCardWidth ? { width: activeCardWidth } : undefined}>
                 <KanbanCardPreview card={activeCard} />
               </div>
             ) : null}

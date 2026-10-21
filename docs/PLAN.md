@@ -243,22 +243,26 @@ Validation record:
 Goal: Let the AI receive the Kanban JSON plus the user question and conversation context, then respond with structured output that includes both a user-facing answer and optional board updates.
 
 Substeps:
-- [ ] Define the request payload format: board JSON, user message, and conversation history.
-- [ ] Define the response contract with a text reply and optional board mutation instructions.
-- [ ] Add backend validation to ensure structured output conforms to the expected shape.
-- [ ] Implement the board update logic for safe, explicit card/column changes.
-- [ ] Add tests covering normal AI responses and optional board modifications.
-- [ ] Confirm the AI can answer a question without changing the board as well as update the board when asked.
+- [x] Define the request payload format: board JSON, user message, and conversation history.
+- [x] Define the response contract with a text reply and optional board mutation instructions.
+- [x] Add backend validation to ensure structured output conforms to the expected shape.
+- [x] Implement the board update logic for safe, explicit card/column changes.
+- [x] Add tests covering normal AI responses and optional board modifications.
+- [x] Confirm the AI can answer a question without changing the board as well as update the board when asked.
 
 Tests:
-- Unit tests for valid structured AI responses.
-- Unit tests for invalid or partially missing AI payloads.
-- Integration tests that send the board JSON and a question, then verify the AI response and update action.
+- [x] Unit tests for valid structured AI responses.
+- [x] Unit tests for invalid or partially missing AI payloads.
+- [x] Integration tests that send the board JSON and a question, then verify the AI response and update action.
 
 Success criteria:
-- The AI receives actionable board context and returns structured data.
-- The assistant can answer questions and optionally mutate the Kanban safely.
-- Board updates are deterministic and validated before applying.
+- [x] The AI receives actionable board context and returns structured data.
+- [x] The assistant can answer questions and optionally mutate the Kanban safely.
+- [x] Board updates are deterministic and validated before applying.
+
+Validation record:
+- Backend tests cover conversation and board context, no-mutation replies, valid create/edit/move/rename operations with persistence, malformed or incomplete structured output, and unknown board references.
+- Structured output uses a strict JSON contract; mutations are applied in order and saved only after validation succeeds.
 
 ## Part 10: AI chat sidebar and auto-refresh UX
 

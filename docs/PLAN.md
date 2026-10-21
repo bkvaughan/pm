@@ -2,73 +2,104 @@
 
 This plan is the execution checklist for the PM MVP. It is intentionally detailed enough that the agent can work through the project in order, keep validation tight, and stop only when each phase has passed the recorded tests and success criteria.
 
-Status: Draft for review and approval.
+Status: Approved execution plan. Database schema sign-off was recorded on 2026-10-21 before Part 6 work began.
+
+## Project constraints and decisions
+
+- Frontend: Next.js 16 static export, React 19, TypeScript, and Tailwind CSS; FastAPI serves the export at `/`.
+- Backend: Python FastAPI in a Docker image, with `uv` managing Python dependencies.
+- Database: SQLite created automatically on board access; Docker persists it in the ignored repository `data/` directory.
+- MVP sign-in: client-side in-memory demo gate with username `user` and password `password`; refresh requires signing in again. No credentials are stored in the database, and authentication is not yet enforced by the API.
+- Ownership: the backend currently addresses the single demo user (`user`); schema supports future users, each with one board.
+- Board API: `GET /api/board` retrieves the current board and `PUT /api/board` validates and replaces the board as a whole. Replacement keeps CRUD, movement, and renaming simple and consistent with the current frontend shape.
+- Database model: normalized `users`, `boards`, `board_columns`, and `cards`; text IDs align with the frontend, integer positions store column/card ordering, foreign keys cascade dependent deletes, and a composite card-to-column key prevents cross-board references.
+- Frontend sync: board loads after login; edits are optimistic and full-board saves are serialized through a promise queue to preserve edit order. The UI reports load/save errors, provides retry for load failures, and indicates saving status.
+- Frontend test boundary: Playwright board-flow tests mock `/api/board`; separate backend tests and a live Docker HTTP smoke check verify actual SQLite persistence.
+- Local scripts: platform-specific start/stop scripts use Docker Compose; the macOS/Linux start script runs Compose detached, and Docker Compose logs can be followed separately.
+- AI: planned OpenRouter model is `openai/gpt-oss-120b`; key comes from project-root `.env`.
+- UI colors: yellow `#ecad0a`, blue `#209dd7`, purple `#753991`, navy `#032147`, and gray `#888888`.
 
 ## Part 1: Plan and documentation setup
 
 Goal: Prepare a clear implementation roadmap, document the current frontend code, and confirm the plan with the user before any build work begins.
 
 Substeps:
-- [ ] Review the existing workspace structure, project constraints, and current frontend implementation.
-- [ ] Confirm the business requirements, MVP limits, stack choices, and color system are recorded in the plan.
-- [ ] Expand the plan into numbered phases with substeps, validation steps, and pass/fail criteria.
-- [ ] Create a frontend-specific AGENTS.md that explains the current app structure, libraries, test setup, and coding patterns.
-- [ ] Share the plan with the user for approval before starting any scaffolding work.
+- [x] Review the existing workspace structure, project constraints, and current frontend implementation.
+- [x] Confirm the business requirements, MVP limits, stack choices, and color system are recorded in the plan.
+- [x] Expand the plan into numbered phases with substeps, validation steps, and pass/fail criteria.
+- [x] Create a frontend-specific AGENTS.md that explains the current app structure, libraries, test setup, and coding patterns.
+- [x] Share the plan with the user for approval before starting any scaffolding work.
 
 Validation:
-- Check that the plan includes all numbered phases from 2 through 10.
-- Check that every phase lists concrete implementation tasks, a test strategy, and measurable success criteria.
-- Check that the frontend AGENTS.md accurately reflects the current code instead of describing aspirational future-state code.
+- [x] Check that the plan includes all numbered phases from 2 through 10.
+- [x] Check that every phase lists concrete implementation tasks, a test strategy, and measurable success criteria.
+- [x] Check that the frontend AGENTS.md accurately reflects the current code instead of describing aspirational future-state code.
 
 Success criteria:
-- The project plan is complete and understandable by a new agent.
-- The frontend AGENTS.md describes the actual codebase structure and test flow.
-- User approves the plan before implementation continues.
+- [x] The project plan is complete and understandable by a new agent.
+- [x] The frontend AGENTS.md describes the actual codebase structure and test flow.
+- [x] User approves the plan before implementation continues.
+
+Validation record:
+- Reviewed the current repo and frontend component/test structure.
+- Plan approval was given before Part 2 implementation.
 
 ## Part 2: Scaffolding and local app runtime
 
 Goal: Get a working local app stack running in Docker with a Python FastAPI backend and static frontend serving.
 
 Substeps:
-- [ ] Create Docker configuration for the app container and any required local ports.
-- [ ] Create the backend directory structure and initialize FastAPI.
-- [ ] Add a minimal app route that returns a simple hello-world response.
-- [ ] Add an API route that can be called from the frontend or curl to verify connectivity.
-- [ ] Add start/stop scripts for Mac, PC, and Linux under scripts/.
-- [ ] Confirm the backend serves static HTML from a local route and an API route responds correctly.
-- [ ] Confirm the app can run locally without breaking the project assumptions.
+- [x] Create Docker configuration for the app container and any required local ports.
+- [x] Create the backend directory structure and initialize FastAPI.
+- [x] Add a minimal app route that returns a simple hello-world response.
+- [x] Add an API route that can be called from the frontend or curl to verify connectivity.
+- [x] Add start/stop scripts for Mac, PC, and Linux under scripts/.
+- [x] Confirm the backend serves static HTML from a local route and an API route responds correctly.
+- [x] Confirm the app can run locally without breaking the project assumptions.
 
 Tests:
-- Curl the root route and confirm static content loads.
-- Curl the API route and confirm a valid JSON response is returned.
-- Start and stop scripts should execute without errors on the target platform.
+- [x] Curl the root route and confirm static content loads.
+- [x] Curl the API route and confirm a valid JSON response is returned.
+- [x] Start and stop scripts should execute without errors on the target platform.
 
 Success criteria:
-- The app runs locally via Docker and scripts.
-- A basic health or hello-world route responds correctly.
-- The backend is reachable and the app is not blocked by package or container startup issues.
+- [x] The app runs locally via Docker and scripts.
+- [x] A basic health or hello-world route responds correctly.
+- [x] The backend is reachable and the app is not blocked by package or container startup issues.
+
+Validation record:
+- Local FastAPI smoke test verified `/`, `/api/hello`, and `/health`.
+- Backend tests passed (3 tests).
+- Docker startup initially revealed that `--frozen` required a missing `uv.lock`; Dockerfile was corrected to resolve dependencies with `uv sync --no-dev`.
+- The app was rebuilt and verified in Docker during later phases.
 
 ## Part 3: Frontend integration and static serving
 
 Goal: Make the existing Next.js frontend build and serve from the backend at /, and ensure the demo Kanban board is visible at the root route.
 
 Substeps:
-- [ ] Review the current Next.js frontend in frontend/ and identify the root page and component structure.
-- [ ] Update the project so the frontend can be built as static output and served by FastAPI.
-- [ ] Connect the backend root route to the built frontend output.
-- [ ] Ensure the Kanban board renders at / without extra client-side workarounds.
-- [ ] Preserve the current design and make sure the app is functional in the served environment.
-- [ ] Run unit tests and any frontend integration checks relevant to the static build.
+- [x] Review the current Next.js frontend in frontend/ and identify the root page and component structure.
+- [x] Update the project so the frontend can be built as static output and served by FastAPI.
+- [x] Connect the backend root route to the built frontend output.
+- [x] Ensure the Kanban board renders at / without extra client-side workarounds.
+- [x] Preserve the current design and make sure the app is functional in the served environment.
+- [x] Run unit tests and any frontend integration checks relevant to the static build.
 
 Tests:
-- Run frontend unit tests for the board logic and rendering.
-- Run the Playwright app smoke test to confirm the page loads at /.
-- Verify the app serves the Kanban on the root route, not just a placeholder shell.
+- [x] Run frontend unit tests for the board logic and rendering.
+- [x] Run the Playwright app smoke test to confirm the page loads at /.
+- [x] Verify the app serves the Kanban on the root route, not just a placeholder shell.
 
 Success criteria:
-- / serves the existing Kanban demo without runtime error.
-- Static build and runtime serve pipeline works.
-- Basic page and board rendering passes tests.
+- [x] / serves the existing Kanban demo without runtime error.
+- [x] Static build and runtime serve pipeline works.
+- [x] Basic page and board rendering passes tests.
+
+Validation record:
+- Frontend static build passed.
+- FastAPI served `frontend/out/index.html` at `/` and its assets correctly.
+- Root page and backend API routes were verified with HTTP requests.
+- Docker build and serving were subsequently verified with the integrated sign-in UI.
 
 ## Part 4: Fake user sign-in flow
 
@@ -177,10 +208,10 @@ Success criteria:
 
 Validation record:
 - Frontend unit tests: 11 passed, including board load/update, saved state, retry, and surfaced save errors.
-- Playwright E2E tests: 4 passed, including moving a card, saving it, logging out, and verifying it remains in the moved column after login.
+- Playwright E2E tests: 4 passed, including moving a card, saving it, logging out, and verifying it remains in the moved column after login. The browser tests use a stateful mock of `/api/board`.
 - Frontend lint and static production build passed.
 - Docker rebuild and live root/health smoke tests passed.
-- Live API persistence check moved a card between columns, confirmed GET returned the moved state, and restored the original local board afterward.
+- Live API persistence check moved a card between columns, confirmed GET returned the moved state, and restored the original local board afterward. This directly verified the actual SQLite-backed API.
 
 ## Part 8: AI connectivity via OpenRouter
 

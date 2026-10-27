@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 project_root = Path(__file__).resolve().parents[2]
 frontend_dist = project_root / "frontend" / "out"
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-OPENROUTER_MODEL = "minimax/minimax-m3.1-flash:free"
+OPENROUTER_MODEL = "nvidia/nemotron-3.5-super-vl:free"
 OPENROUTER_TIMEOUT = 30.0
 
 

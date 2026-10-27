@@ -16,7 +16,7 @@ Status: Approved execution plan. Database schema sign-off was recorded on 2026-1
 - Frontend sync: board loads after login; edits are optimistic and full-board saves are serialized through a promise queue to preserve edit order. The UI reports load/save errors, provides retry for load failures, and indicates saving status.
 - Frontend test boundary: Playwright board-flow tests mock `/api/board`; separate backend tests and a live Docker HTTP smoke check verify actual SQLite persistence.
 - Local scripts: platform-specific start/stop scripts use Docker Compose; the macOS/Linux start script runs Compose detached, and Docker Compose logs can be followed separately.
-- AI: planned OpenRouter model is `minimax/minimax-m3.1-flash:free`; key comes from project-root `.env`.
+- AI: configured OpenRouter model is `nvidia/nemotron-3.5-super-vl:free`; key comes from project-root `.env`.
 - UI colors: yellow `#ecad0a`, blue `#209dd7`, purple `#753991`, navy `#032147`, and gray `#888888`.
 
 ## Part 1: Plan and documentation setup
@@ -219,7 +219,7 @@ Goal: Confirm the backend can successfully call OpenRouter and return valid AI r
 
 Substeps:
 - [x] Add environment handling for the OpenRouter API key.
-- [x] Configure the backend to call the free model: minimax/minimax-m3.1-flash:free.
+- [x] Configure the backend to call a free model (currently nvidia/nemotron-3.5-super-vl:free).
 - [x] Run a minimal AI connectivity test with a trivial prompt such as "2+2".
 - [x] Validate request/response handling, timeout, and error surfaces.
 - [x] Confirm the backend logs or exposes enough detail to debug AI issues without overengineering.
@@ -236,7 +236,8 @@ Success criteria:
 
 Validation record:
 - Backend tests mock OpenRouter to verify the `2+2` request, agreed model, response parsing, missing and rejected API keys, and timeout handling.
-- The original live `2+2` smoke test used paid model `openai/gpt-oss-120b` and received HTTP 402 because the account had no credits. `google/gemma-4-31b-it:free` also returned HTTP 429 due to its upstream shared pool being rate-limited. `minimax/minimax-m3.1-flash:free` returned HTTP 200 with answer `4`; it is now the configured model.
+- The original live `2+2` smoke test used paid model `openai/gpt-oss-120b` and received HTTP 402 because the account had no credits. `google/gemma-4-31b-it:free` also returned HTTP 429 due to its upstream shared pool being rate-limited. `minimax/minimax-m3.1-flash:free` returned HTTP 200 with answer `4` and was configured.
+- On 2026-10-26 `minimax/minimax-m3.1-flash:free` was removed from OpenRouter (HTTP 404). Free models supporting JSON response format were tested live through `/api/ai/completion` and `/api/ai/assistant`; Gemma 4 and Xing 4.0 returned HTTP 429 and `nvidia/nemotron-3-super-120b-a12b:free` returned HTTP 404. `nvidia/nemotron-3.5-super-vl:free` answered `4` and applied a requested move and card creation correctly in 3 of 3 runs; it is now the configured model.
 
 ## Part 9: Structured AI board assistant
 

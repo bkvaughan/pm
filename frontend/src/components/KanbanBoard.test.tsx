@@ -5,6 +5,10 @@ import { KanbanBoard } from "@/components/KanbanBoard";
 import { initialData, type BoardData } from "@/lib/kanban";
 
 const getFirstColumn = () => screen.getAllByTestId(/column-/i)[0];
+const countSaves = () =>
+  vi
+    .mocked(fetch)
+    .mock.calls.filter(([, init]) => init?.method === "PUT").length;
 
 let persistedBoard: BoardData;
 
@@ -39,11 +43,22 @@ describe("KanbanBoard", () => {
     render(<KanbanBoard />);
     const input = (await screen.findAllByLabelText("Column title"))[0];
     await userEvent.clear(input);
-    await userEvent.type(input, "New Name");
-    expect(input).toHaveValue("New Name");
+    await userEvent.type(input, "New Name{Enter}");
     await vi.waitFor(() => {
       expect(persistedBoard.columns[0].title).toBe("New Name");
     });
+    expect(screen.getAllByLabelText("Column title")[0]).toHaveValue("New Name");
+    expect(countSaves()).toBe(1);
+  });
+
+  it("restores an emptied column title without saving", async () => {
+    render(<KanbanBoard />);
+    const input = (await screen.findAllByLabelText("Column title"))[0];
+    await userEvent.clear(input);
+    await userEvent.tab();
+
+    expect(input).toHaveValue("Backlog");
+    expect(countSaves()).toBe(0);
   });
 
   it("persists added and removed cards", async () => {
@@ -100,7 +115,7 @@ describe("KanbanBoard", () => {
     );
 
     await userEvent.clear(firstTitle);
-    await userEvent.type(firstTitle, "Unsaved name");
+    await userEvent.type(firstTitle, "Unsaved name{Enter}");
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Board save failed (500)."

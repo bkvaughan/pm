@@ -62,17 +62,6 @@ class BoardData(BaseModel):
         return self
 
 
-class AICompletionRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    prompt: str = Field(min_length=1)
-
-
-class AICompletionResponse(BaseModel):
-    answer: str
-    model: str
-
-
 class ConversationMessage(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -299,14 +288,6 @@ def update_board(board: BoardData) -> dict[str, Any]:
     board_data = board.model_dump()
     database.save_board(board_data)
     return board_data
-
-
-@app.post("/api/ai/completion", response_model=AICompletionResponse)
-async def complete_ai_prompt(request: AICompletionRequest) -> AICompletionResponse:
-    answer = await openrouter_completion(
-        [{"role": "user", "content": request.prompt}]
-    )
-    return AICompletionResponse(answer=answer, model=OPENROUTER_MODEL)
 
 
 @app.post("/api/ai/assistant", response_model=AIAssistantResponse)

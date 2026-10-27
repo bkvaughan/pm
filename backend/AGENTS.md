@@ -6,7 +6,7 @@ This directory contains the FastAPI backend for the PM MVP. It serves the static
 
 ## Current state
 
-The backend initializes the SQLite schema on first board access and seeds the demo user's first board. Board reads and full-board updates use the API's existing frontend-compatible JSON shape. The AI completion and board-assistant routes proxy prompts to OpenRouter using the configured model.
+The backend initializes the SQLite schema on first board access and seeds the demo user's first board. Board reads and full-board updates use the API's existing frontend-compatible JSON shape. The board-assistant route sends prompts to OpenRouter using the configured model.
 
 ## Stack
 
@@ -22,7 +22,6 @@ The backend initializes the SQLite schema on first board access and seeds the de
 - /health: returns the service status for health checks
 - GET /api/board: returns the demo user's board
 - PUT /api/board: validates and replaces the demo user's board
-- POST /api/ai/completion: sends a text prompt to OpenRouter and returns its answer
 - POST /api/ai/assistant: sends the supplied board, message, and conversation history; returns a reply and optionally a validated, persisted board update
 
 The AI route requires `OPENROUTER_API_KEY` in the backend environment and times out after 30 seconds.

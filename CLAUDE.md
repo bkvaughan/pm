@@ -50,11 +50,13 @@ npm run test:e2e            # Playwright (tests/), starts next dev on 127.0.0.1:
 
 **Board data contract.** The shape `{ columns: [{id, title, cardIds}], cards: {id: {id, title, details}} }` is shared across layers: `BoardData` in `frontend/src/lib/kanban.ts` and the Pydantic `BoardData` in `main.py` (which validates that every card appears in exactly one column and IDs match map keys). Changes to the shape must be made in both places.
 
+**Network exposure.** Docker Compose publishes the app on `127.0.0.1:8000` only, because the API has no authentication.
+
 **Persistence.** `GET /api/board` reads and `PUT /api/board` replaces the whole board; there are no per-card endpoints. `backend/app/database.py` maps the board onto normalized SQLite tables (`users`, `boards`, `board_columns`, `cards`) using `position` columns for ordering, auto-creates the schema, and seeds from `initial_data.py` on first access. DB path is `data/pm.sqlite3` (override with `PM_DATABASE_PATH`); Docker mounts `./data` to `/app/data`. Schema is documented in `docs/DATABASE.md` and `docs/database-schema.json`. Everything is scoped to the hardcoded demo user `user`.
 
 **Frontend sync.** `KanbanBoard.tsx` loads the board after login, applies edits optimistically, and serializes full-board PUTs through a promise queue to preserve edit order. Sign-in (`LoginGate.tsx`, `user`/`password`) is client-side in-memory only; the API does not enforce auth.
 
-**AI assistant.** `AIChatSidebar.tsx` posts `{board, message, history}` to `POST /api/ai/assistant`. The backend calls OpenRouter (JSON mode) asking for `{reply, mutations[]}`, where mutations are a discriminated union (`create_card`, `edit_card`, `move_card`, `rename_column`). `apply_board_mutations` applies them in order to the submitted board; any invalid output or unknown ID returns 502 and nothing is saved. Valid mutations are persisted server-side and the updated board is returned for the frontend to display. `POST /api/ai/completion` is a plain prompt passthrough used for connectivity checks.
+**AI assistant.** `AIChatSidebar.tsx` posts `{board, message, history}` to `POST /api/ai/assistant`. The backend calls OpenRouter (JSON mode) asking for `{reply, mutations[]}`, where mutations are a discriminated union (`create_card`, `edit_card`, `move_card`, `rename_column`). `apply_board_mutations` applies them in order to the submitted board; any invalid output or unknown ID returns 502 and nothing is saved. Valid mutations are persisted server-side and the updated board is returned for the frontend to display.
 
 **OpenRouter model.** The configured model is `OPENROUTER_MODEL` in `main.py` (`nvidia/nemotron-3.5-super-vl:free`; must be a `:free` model). This intentionally differs from `openai/gpt-oss-120b` in `AGENTS.md`; see the Part 8 record in `docs/PLAN.md`. The backend reads `OPENROUTER_API_KEY` from the process environment (Docker Compose loads `.env`; a local uvicorn run needs it exported).
 

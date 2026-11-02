@@ -33,7 +33,7 @@ export const LoginGate = ({ children }: LoginGateProps) => {
   if (isAuthenticated) {
     return (
       <div>
-        <div className="mx-auto flex max-w-[1500px] justify-end px-6 pt-6">
+        <div className="mx-auto flex max-w-[2000px] justify-end px-6 pt-6">
           <button
             type="button"
             onClick={handleLogout}

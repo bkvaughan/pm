@@ -12,6 +12,7 @@ type KanbanColumnProps = {
   onRename: (columnId: string, title: string) => void;
   onAddCard: (columnId: string, title: string, details: string) => void;
   onDeleteCard: (columnId: string, cardId: string) => void;
+  onEditCard: (cardId: string, title: string, details: string) => void;
 };
 
 export const KanbanColumn = ({
@@ -21,6 +22,7 @@ export const KanbanColumn = ({
   onRename,
   onAddCard,
   onDeleteCard,
+  onEditCard,
 }: KanbanColumnProps) => {
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
 
@@ -30,7 +32,7 @@ export const KanbanColumn = ({
       className={clsx(
         "flex min-h-[520px] flex-col rounded-3xl border bg-[var(--surface-strong)] p-4 shadow-[var(--shadow)] transition",
         isOver || isDropTarget
-          ? "border-[var(--accent-yellow)] bg-amber-100/70 outline outline-2 outline-offset-2 outline-[var(--accent-yellow)] ring-2 ring-[var(--accent-yellow)]"
+          ? "border-[var(--accent-yellow)] bg-amber-50 shadow-[0_0_0_3px_rgba(236,173,10,0.18)]"
           : "border-[var(--stroke)]"
       )}
       data-testid={`column-${column.id}`}
@@ -70,6 +72,7 @@ export const KanbanColumn = ({
               key={card.id}
               card={card}
               onDelete={(cardId) => onDeleteCard(column.id, cardId)}
+              onEdit={onEditCard}
             />
           ))}
         </SortableContext>

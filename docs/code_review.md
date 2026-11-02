@@ -168,13 +168,13 @@ Ordered by value for effort. Each item can be done and tested on its own.
 |---|---|---|---|---|
 | 1 | Bind Docker to `127.0.0.1` and remove `/api/ai/completion`. | H4 | Small | Done 2026-10-27 |
 | 2 | Commit column renames on blur/Enter, reject empty titles. | H3 | Small | Done 2026-10-27 |
-| 3 | Make the assistant use the persisted board, drain the save queue first, lock editing while waiting, and save in one place. | H2, L1 | Medium | Open |
-| 4 | Add inline card editing with tests. | H1 | Medium | Open |
-| 5 | Add a reload action after a failed save. | M1 | Small | Open |
-| 6 | Commit `uv.lock` and use `--frozen` in the Dockerfile. | M4 | Small | Open |
-| 7 | Add one Playwright smoke test against the Docker app. | M5 | Medium | Open |
-| 8 | Show expected wait time for assistant replies. | M3 | Small | Open |
-| 9 | Repo hygiene: script permissions, ignore test results, update `AGENTS.md`, drop tests from the image, bump `@types/node`, commit pending changes. | R1-R8 | Small | Open |
-| 10 | Simplifications: remove client response validation, merge sidebar error handling, move seed data to test fixtures, initialize the DB at startup. | L2-L5 | Small | Open |
-| 11 | Add keyboard drag support and align the logout bar width. | L7, L8 | Small | Open |
-| 12 | Document the multi-user primary key limitation in `docs/DATABASE.md`. | M2 | Small | Open |
+| 3 | Make the assistant use the persisted board, drain the save queue first, lock editing while waiting, and save in one place. | H2, L1 | Medium | Done 2026-10-27 |
+| 4 | Add inline card editing with tests. | H1 | Medium | Done 2026-11-02 |
+| 5 | Add a reload action after a failed save. | M1 | Small | Done 2026-11-02 |
+| 6 | Commit `uv.lock` and use `--frozen` in the Dockerfile. | M4 | Small | Done 2026-11-02 |
+| 7 | Add one Playwright smoke test against the Docker app. | M5 | Medium | Done 2026-11-02 |
+| 8 | Show expected wait time for assistant replies. | M3 | Small | Done 2026-11-02 |
+| 9 | Repo hygiene: script permissions, ignore test results, update `AGENTS.md`, drop tests from the image, bump `@types/node`, commit pending changes. | R1-R8 | Small | Done 2026-11-02 |
+| 10 | Simplifications: remove client response validation, merge sidebar error handling, move seed data to test fixtures, initialize the DB at startup. | L2-L5 | Small | Done 2026-11-02 |
+| 11 | Add keyboard drag support and align the logout bar width. | L7, L8 | Small | Done 2026-11-02 |
+| 12 | Document the multi-user primary key limitation in `docs/DATABASE.md`. | M2 | Small | Done 2026-11-02 |

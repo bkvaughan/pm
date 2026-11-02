@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
-import { initialData, type BoardData } from "../src/lib/kanban";
+import type { BoardData } from "../src/lib/kanban";
+import { initialData } from "../src/test/fixtures";
 
 const signIn = async (page: Page) => {
   await page.getByLabel("Username").fill("user");
@@ -177,10 +178,6 @@ test("highlights a target column across its header and blank interior", async ({
       "border-top-color",
       "rgb(236, 173, 10)"
     );
-    await expect(targetColumn).toHaveCSS(
-      "outline-color",
-      "rgb(236, 173, 10)"
-    );
   }
 
   await page.mouse.up();
@@ -216,7 +213,6 @@ test("drops a card into an empty column without targeting a card", async ({
     dropZoneBox.y + dropZoneBox.height / 2,
     { steps: 20 }
   );
-  await expect(targetColumn).toHaveClass(/ring-2/);
   await expect(targetColumn).toHaveClass(/border-\[var\(--accent-yellow\)\]/);
   await page.mouse.up();
 
@@ -252,7 +248,6 @@ test("drops near the visible edge of an empty column", async ({ page }) => {
   );
   await page.mouse.down();
   await page.mouse.move(dropX, dropY, { steps: 20 });
-  await expect(targetColumn).toHaveClass(/ring-2/);
   await expect(targetColumn).toHaveClass(/border-\[var\(--accent-yellow\)\]/);
   await page.mouse.up();
 
@@ -301,53 +296,101 @@ test("moves a card from a full Review column into empty Done", async ({
   await expect(targetColumn.getByTestId("card-card-6")).toBeVisible();
 });
 
-test("AI chat applies a board update and persists it", async ({ page }) => {
-  const board = structuredClone(initialData);
-  await mockBoardApi(page, board);
-  await page.route("**/api/ai/assistant", async (route) => {
-    const request = route.request().postDataJSON() as {
-      board: BoardData;
-      message: string;
-      history: unknown[];
-    };
-    expect(request.message).toBe("Move the roadmap card to Discovery.");
-    expect(request.history).toEqual([]);
-    expect(request.board.columns[0].cardIds).toContain("card-1");
+test("AI chat locks the board and applies the saved board update", async ({
+  page,
+}) => {
+  await mockBoardApi(page);
+  let finishAssistant = () => {};
+  const assistantCalled = new Promise<void>((resolve) => {
+    void page.route("**/api/ai/assistant", async (route) => {
+      expect(route.request().postDataJSON()).toEqual({
+        message: "Move the roadmap card to Discovery.",
+        history: [],
+      });
+      resolve();
+      await new Promise<void>((done) => (finishAssistant = done));
 
-    const updatedBoard = structuredClone(request.board);
-    updatedBoard.columns[0].cardIds =
-      updatedBoard.columns[0].cardIds.filter((id) => id !== "card-1");
-    updatedBoard.columns[1].cardIds.push("card-1");
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        reply: "Moved the roadmap card to Discovery.",
-        board: updatedBoard,
-        model: "test-model",
-      }),
+      const updatedBoard = structuredClone(initialData);
+      updatedBoard.columns[0].cardIds = ["card-2"];
+      updatedBoard.columns[1].cardIds.push("card-1");
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          reply: "Moved the roadmap card to Discovery.",
+          board: updatedBoard,
+          model: "test-model",
+        }),
+      });
     });
+  });
+  let boardSaves = 0;
+  page.on("request", (request) => {
+    if (request.url().endsWith("/api/board") && request.method() === "PUT") {
+      boardSaves += 1;
+    }
   });
 
   await page.goto("/");
   await signIn(page);
-
-  const targetColumn = page.getByTestId("column-col-discovery");
   await expect(page.getByTestId("card-card-1")).toBeVisible();
   await page.getByLabel("Message the assistant").fill(
     "Move the roadmap card to Discovery."
   );
+  await page.getByRole("button", { name: "Send" }).click();
+
+  await assistantCalled;
+  await expect(page.getByTestId("board-save-status")).toHaveText(
+    "Board is locked while the assistant works..."
+  );
+  await expect(page.getByRole("main")).toHaveAttribute("inert");
+
+  finishAssistant();
+  await expect(
+    page.getByText("Moved the roadmap card to Discovery.")
+  ).toBeVisible();
+  await expect(
+    page.getByTestId("column-col-discovery").getByTestId("card-card-1")
+  ).toBeVisible();
+  await expect(page.getByTestId("board-save-status")).toHaveText("Saved");
+  await expect(page.getByRole("main")).not.toHaveAttribute("inert");
+  expect(boardSaves).toBe(0);
+});
+
+test("edits a card and persists the change", async ({ page }) => {
+  await mockBoardApi(page);
+  await page.goto("/");
+  await signIn(page);
+  const card = page.getByTestId("card-card-1");
+  await card.getByRole("button", { name: "Edit Align roadmap themes" }).click();
+  await card.getByLabel("Card title").fill("Edited in e2e");
+  await card.getByLabel("Card details").fill("New details.");
   const savedBoard = page.waitForResponse(
     (response) =>
       response.url().endsWith("/api/board") &&
       response.request().method() === "PUT"
   );
-  await page.getByRole("button", { name: "Send" }).click();
+  await card.getByRole("button", { name: "Save" }).click();
+  const saved = (await savedBoard).request().postDataJSON() as BoardData;
+  expect(saved.cards["card-1"]).toEqual({
+    id: "card-1",
+    title: "Edited in e2e",
+    details: "New details.",
+  });
+  await expect(card.getByText("Edited in e2e")).toBeVisible();
+});
 
-  await expect(
-    page.getByText("Moved the roadmap card to Discovery.")
-  ).toBeVisible();
-  await expect(targetColumn.getByTestId("card-card-1")).toBeVisible();
-  await savedBoard;
-  await expect(page.getByTestId("board-save-status")).toHaveText("Saved");
+test("moves a card between columns with the keyboard", async ({ page }) => {
+  await mockBoardApi(page);
+  await page.goto("/");
+  await signIn(page);
+  const card = page.getByTestId("card-card-3");
+  const targetColumn = page.getByTestId("column-col-progress");
+  await card.focus();
+  await page.keyboard.press("Space");
+  await expect(card).toHaveAttribute("aria-pressed", "true");
+  await page.keyboard.press("ArrowRight");
+  await expect(targetColumn).toHaveClass(/border-\[var\(--accent-yellow\)\]/);
+  await page.keyboard.press("Space");
+  await expect(targetColumn.getByTestId("card-card-3")).toBeVisible();
 });

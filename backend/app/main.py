@@ -1,3 +1,5 @@
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 import logging
 import os
@@ -12,7 +14,14 @@ from fastapi.staticfiles import StaticFiles
 
 from app import database
 
-app = FastAPI(title="PM MVP Backend")
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    database.initialize_database()
+    yield
+
+
+app = FastAPI(title="PM MVP Backend", lifespan=lifespan)
 logger = logging.getLogger(__name__)
 
 project_root = Path(__file__).resolve().parents[2]
@@ -123,7 +132,6 @@ BoardMutation = Annotated[
 class AIAssistantRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    board: BoardData
     message: str = Field(min_length=1, max_length=4000)
     history: list[ConversationMessage] = Field(default_factory=list, max_length=20)
 
@@ -308,13 +316,14 @@ async def assist_with_board(
         "Only use IDs present in the board for existing cards and columns. "
         "For a new card, do not invent an ID."
     )
+    board = BoardData.model_validate(database.get_board())
     messages = [{"role": "system", "content": instructions}]
     messages.extend(message.model_dump() for message in request.history)
     messages.append(
         {
             "role": "user",
             "content": (
-                f"Current board JSON:\n{request.board.model_dump_json()}\n\n"
+                f"Current board JSON:\n{board.model_dump_json()}\n\n"
                 f"User request:\n{request.message}"
             ),
         }
@@ -331,7 +340,7 @@ async def assist_with_board(
         ) from error
 
     try:
-        updated_board = apply_board_mutations(request.board, assistant_output.mutations)
+        updated_board = apply_board_mutations(board, assistant_output.mutations)
     except ValueError as error:
         logger.error("OpenRouter returned a mutation invalid for the submitted board.")
         raise HTTPException(

@@ -16,12 +16,11 @@ WORKDIR /app
 RUN pip install --no-cache-dir uv
 
 COPY --from=frontend-build /app/frontend/out ./frontend/out
-COPY backend/pyproject.toml ./backend/pyproject.toml
+COPY backend/pyproject.toml backend/uv.lock ./backend/
 COPY backend/app ./backend/app
-COPY backend/tests ./backend/tests
 
 WORKDIR /app/backend
-RUN uv sync --no-dev
+RUN uv sync --frozen --no-dev
 
 EXPOSE 8000
 

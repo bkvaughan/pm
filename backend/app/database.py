@@ -102,7 +102,6 @@ def _insert_board(
 
 def get_board(db_path: Optional[Path] = None) -> dict[str, Any]:
     db_path = db_path or DB_PATH
-    initialize_database(db_path)
     with closing(connect(db_path)) as connection:
         columns = connection.execute(
             """
@@ -147,7 +146,6 @@ def get_board(db_path: Optional[Path] = None) -> dict[str, Any]:
 
 def save_board(board: dict[str, Any], db_path: Optional[Path] = None) -> None:
     db_path = db_path or DB_PATH
-    initialize_database(db_path)
     with closing(connect(db_path)) as connection, connection:
         connection.execute("DELETE FROM cards WHERE board_id = ?", (DEMO_BOARD_ID,))
         connection.execute(

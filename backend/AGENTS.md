@@ -6,7 +6,7 @@ This directory contains the FastAPI backend for the PM MVP. It serves the static
 
 ## Current state
 
-The backend initializes the SQLite schema on first board access and seeds the demo user's first board. Board reads and full-board updates use the API's existing frontend-compatible JSON shape. The board-assistant route sends prompts to OpenRouter using the configured model.
+The backend initializes the SQLite schema at startup (FastAPI lifespan) and seeds the demo user's first board. Board reads and full-board updates use the API's existing frontend-compatible JSON shape. The board-assistant route sends prompts to OpenRouter using the configured model.
 
 ## Stack
 
@@ -22,7 +22,7 @@ The backend initializes the SQLite schema on first board access and seeds the de
 - /health: returns the service status for health checks
 - GET /api/board: returns the demo user's board
 - PUT /api/board: validates and replaces the demo user's board
-- POST /api/ai/assistant: sends the supplied board, message, and conversation history; returns a reply and optionally a validated, persisted board update
+- POST /api/ai/assistant: sends the persisted board, the message, and conversation history; returns a reply and optionally a validated, persisted board update
 
 The AI route requires `OPENROUTER_API_KEY` in the backend environment and times out after 30 seconds.
 The board assistant accepts explicit card creation, editing, and movement plus column renaming. Invalid model output or references are rejected without saving changes.
@@ -35,6 +35,10 @@ From the repository root:
 uv run --project backend uvicorn app.main:app --app-dir backend --reload --host 0.0.0.0 --port 8000
 uv run --project backend pytest backend/tests
 ```
+
+These need `uv` on PATH (install with `pip install uv` or see https://docs.astral.sh/uv/). Without it, an existing `backend/.venv` works: `backend/.venv/bin/pytest backend/tests`.
+
+Dependencies are locked in `backend/uv.lock`, and the Docker build uses `uv sync --frozen`. After changing `pyproject.toml`, run `uv lock --project backend` and commit the lock file.
 
 ## Validation
 

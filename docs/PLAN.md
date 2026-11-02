@@ -296,3 +296,9 @@ Validation record:
 ## Execution note
 
 The agent should proceed in order, completing the tests for each phase before moving on to the next. The user should approve this plan before any implementation work in Part 2 begins.
+
+## Code review follow-up (2026-11-02)
+
+The action plan in `docs/code_review.md` is complete. Added inline card editing, a Reload board action after a failed save, keyboard drag and drop, a wait-time note in the assistant sidebar, a locked `backend/uv.lock` with `uv sync --frozen` in Docker, a Playwright smoke test against the Docker app (`npm run test:e2e:docker`), database initialization at startup, and repository cleanups.
+
+Validation record: 17 backend tests, 20 frontend unit tests, 12 mocked Playwright tests, and 1 Docker smoke test passed, along with lint and the static build.

@@ -15,41 +15,14 @@ type AIAssistantResponse = {
 };
 
 type AIChatSidebarProps = {
-  board: BoardData;
+  waitForSaves: () => Promise<void>;
+  onBusyChange: (isBusy: boolean) => void;
   onBoardUpdate: (board: BoardData) => void;
 };
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null;
-
-const isBoardData = (value: unknown): value is BoardData => {
-  if (!isRecord(value) || !Array.isArray(value.columns) || !isRecord(value.cards)) {
-    return false;
-  }
-
-  return value.columns.every(
-    (column) =>
-      isRecord(column) &&
-      typeof column.id === "string" &&
-      typeof column.title === "string" &&
-      Array.isArray(column.cardIds) &&
-      column.cardIds.every((id) => typeof id === "string")
-  ) && Object.entries(value.cards).every(
-    ([id, card]) =>
-      isRecord(card) &&
-      card.id === id &&
-      typeof card.title === "string" &&
-      typeof card.details === "string"
-  );
-};
-
-const isAssistantResponse = (value: unknown): value is AIAssistantResponse =>
-  isRecord(value) &&
-  typeof value.reply === "string" &&
-  (value.board === null || isBoardData(value.board));
-
 export const AIChatSidebar = ({
-  board,
+  waitForSaves,
+  onBusyChange,
   onBoardUpdate,
 }: AIChatSidebarProps) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -81,13 +54,14 @@ export const AIChatSidebar = ({
     setDraft("");
     setError(null);
     setIsSending(true);
+    onBusyChange(true);
 
     try {
+      await waitForSaves();
       const response = await fetch("/api/ai/assistant", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          board,
           message,
           history: messages.slice(-20).map(({ role, content }) => ({
             role,
@@ -97,24 +71,17 @@ export const AIChatSidebar = ({
       });
 
       if (!response.ok) {
-        let detail = `Assistant request failed (${response.status}).`;
-        try {
-          const errorPayload: unknown = await response.json();
-          if (isRecord(errorPayload) && typeof errorPayload.detail === "string") {
-            detail = errorPayload.detail;
-          }
-        } catch {
-          setError(detail);
-          return;
-        }
-        setError(detail);
+        const errorPayload = (await response.json().catch(() => null)) as {
+          detail?: string;
+        } | null;
+        setError(
+          errorPayload?.detail ??
+            `Assistant request failed (${response.status}).`
+        );
         return;
       }
 
-      const payload: unknown = await response.json();
-      if (!isAssistantResponse(payload)) {
-        throw new Error("Assistant returned an invalid response.");
-      }
+      const payload = (await response.json()) as AIAssistantResponse;
 
       setMessages((current) => [
         ...current,
@@ -135,6 +102,7 @@ export const AIChatSidebar = ({
       );
     } finally {
       setIsSending(false);
+      onBusyChange(false);
     }
   };
 
@@ -183,7 +151,7 @@ export const AIChatSidebar = ({
         )}
         {isSending && (
           <p role="status" className="text-sm text-[var(--gray-text)]">
-            Assistant is thinking...
+            Assistant is thinking... Replies can take up to a minute.
           </p>
         )}
       </div>

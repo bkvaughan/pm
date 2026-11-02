@@ -1,11 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import clsx from "clsx";
 import {
   DndContext,
   DragOverlay,
+  KeyboardSensor,
   PointerSensor,
   closestCenter,
+  closestCorners,
   pointerWithin,
   useSensor,
   useSensors,
@@ -14,6 +17,7 @@ import {
   type DragOverEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
+import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
 import { AIChatSidebar } from "@/components/AIChatSidebar";
@@ -24,6 +28,7 @@ export const KanbanBoard = () => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isAssistantBusy, setIsAssistantBusy] = useState(false);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [activeCardWidth, setActiveCardWidth] = useState<number | null>(null);
   const [dropTargetColumnId, setDropTargetColumnId] = useState<string | null>(
@@ -36,6 +41,9 @@ export const KanbanBoard = () => {
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 5 },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
     })
   );
 
@@ -49,6 +57,7 @@ export const KanbanBoard = () => {
       const nextBoard = (await response.json()) as BoardData;
       boardRef.current = nextBoard;
       setBoard(nextBoard);
+      setSaveError(null);
     } catch (error) {
       if (!signal?.aborted) {
         setLoadError(
@@ -107,6 +116,10 @@ export const KanbanBoard = () => {
     }
 
     const pointerCoordinates = args.pointerCoordinates;
+    // Keyboard drags have no pointer; match the moved card's rectangle instead.
+    if (!pointerCoordinates) {
+      return closestCorners(args);
+    }
     const columnIds = new Set(currentBoard.columns.map((column) => column.id));
     const pointerCollisions = pointerWithin(args);
     const columnContainers = args.droppableContainers.filter(({ id }) =>
@@ -119,15 +132,13 @@ export const KanbanBoard = () => {
       .map(({ id }) => args.droppableRects.get(id))
       .filter((rect): rect is NonNullable<typeof rect> => rect !== undefined);
     const withinBoardBounds =
-      pointerCoordinates !== null &&
-      pointerCoordinates !== undefined &&
       columnRects.length > 0 &&
       pointerCoordinates.x >= Math.min(...columnRects.map(({ left }) => left)) &&
       pointerCoordinates.x <= Math.max(...columnRects.map(({ right }) => right)) &&
       pointerCoordinates.y >= Math.min(...columnRects.map(({ top }) => top)) &&
       pointerCoordinates.y <= Math.max(...columnRects.map(({ bottom }) => bottom));
     const nearestColumnCollision =
-      !pointerColumnCollision && pointerCoordinates && withinBoardBounds
+      !pointerColumnCollision && withinBoardBounds
         ? closestCenter({
             ...args,
             collisionRect: {
@@ -231,6 +242,16 @@ export const KanbanBoard = () => {
     }));
   };
 
+  const handleEditCard = (cardId: string, title: string, details: string) => {
+    updateBoard((current) => ({
+      ...current,
+      cards: {
+        ...current.cards,
+        [cardId]: { ...current.cards[cardId], title, details },
+      },
+    }));
+  };
+
   const handleDeleteCard = (columnId: string, cardId: string) => {
     updateBoard((current) => ({
       ...current,
@@ -248,8 +269,10 @@ export const KanbanBoard = () => {
     }));
   };
 
+  // The backend has already saved the assistant's changes.
   const handleAssistantBoardUpdate = (nextBoard: BoardData) => {
-    updateBoard(() => nextBoard);
+    boardRef.current = nextBoard;
+    setBoard(nextBoard);
   };
 
   const activeCard = activeCardId ? cardsById[activeCardId] : null;
@@ -289,7 +312,14 @@ export const KanbanBoard = () => {
       <div className="pointer-events-none absolute bottom-0 right-0 h-[520px] w-[520px] translate-x-1/4 translate-y-1/4 rounded-full bg-[radial-gradient(circle,_rgba(117,57,145,0.18)_0%,_rgba(117,57,145,0.05)_55%,_transparent_75%)]" />
 
       <div className="relative mx-auto grid min-h-screen max-w-[2000px] gap-6 px-6 pb-16 pt-8 2xl:grid-cols-[minmax(0,1fr)_360px]">
-        <main className="flex min-w-0 flex-col gap-10">
+        <main
+          inert={isAssistantBusy}
+          aria-busy={isAssistantBusy}
+          className={clsx(
+            "flex min-w-0 flex-col gap-10 transition-opacity",
+            isAssistantBusy && "opacity-60"
+          )}
+        >
           <header className="flex flex-col gap-6 rounded-[32px] border border-[var(--stroke)] bg-white/80 p-8 shadow-[var(--shadow)] backdrop-blur">
           <div className="flex flex-wrap items-start justify-between gap-6">
             <div>
@@ -314,16 +344,29 @@ export const KanbanBoard = () => {
             </div>
           </div>
           {saveError && (
-            <p role="alert" className="text-sm font-semibold text-red-700">
-              {saveError}
-            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              <p role="alert" className="text-sm font-semibold text-red-700">
+                {saveError}
+              </p>
+              <button
+                type="button"
+                onClick={() => void loadBoard()}
+                className="rounded-full border border-[var(--stroke)] px-4 py-1 text-xs font-semibold text-[var(--navy-dark)] transition hover:border-[var(--primary-blue)]"
+              >
+                Reload board
+              </button>
+            </div>
           )}
           <p
             data-testid="board-save-status"
             className="text-sm text-[var(--gray-text)]"
             aria-live="polite"
           >
-            {isSaving ? "Saving changes..." : "Saved"}
+            {isAssistantBusy
+              ? "Board is locked while the assistant works..."
+              : isSaving
+                ? "Saving changes..."
+                : "Saved"}
           </p>
           <div className="flex flex-wrap items-center gap-4">
             {board.columns.map((column) => (
@@ -357,6 +400,7 @@ export const KanbanBoard = () => {
                     onRename={handleRenameColumn}
                     onAddCard={handleAddCard}
                     onDeleteCard={handleDeleteCard}
+                    onEditCard={handleEditCard}
                   />
                 ))}
               </section>
@@ -380,7 +424,8 @@ export const KanbanBoard = () => {
           </DndContext>
         </main>
         <AIChatSidebar
-          board={board}
+          waitForSaves={() => saveQueue.current}
+          onBusyChange={setIsAssistantBusy}
           onBoardUpdate={handleAssistantBoardUpdate}
         />
       </div>

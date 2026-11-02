@@ -102,7 +102,7 @@ def test_put_board_rejects_cards_not_listed_in_exactly_one_column(
 def post_assistant(client: TestClient) -> httpx.Response:
     return client.post(
         "/api/ai/assistant",
-        json={"board": client.get("/api/board").json(), "message": "Hello"},
+        json={"message": "Hello"},
     )
 
 
@@ -194,7 +194,6 @@ def test_ai_assistant_answers_without_changing_board(
     response = client.post(
         "/api/ai/assistant",
         json={
-            "board": board,
             "message": "Which card is in Backlog?",
             "history": [
                 {"role": "user", "content": "I am reviewing the project."},
@@ -249,7 +248,7 @@ def test_ai_assistant_applies_and_persists_explicit_mutations(
     mock_openrouter(monkeypatch, assistant_response)
     response = client.post(
         "/api/ai/assistant",
-        json={"board": board, "message": "Update the board."},
+        json={"message": "Update the board."},
     )
 
     assert response.status_code == 200
@@ -302,7 +301,7 @@ def test_ai_assistant_rejects_invalid_structured_output(
     mock_openrouter(monkeypatch, assistant_response)
     response = client.post(
         "/api/ai/assistant",
-        json={"board": board, "message": "Please update the board."},
+        json={"message": "Please update the board."},
     )
 
     assert response.status_code == 502
@@ -345,9 +344,36 @@ def test_ai_assistant_rejects_mutations_for_unknown_board_ids(
     mock_openrouter(monkeypatch, assistant_response)
     response = client.post(
         "/api/ai/assistant",
-        json={"board": board, "message": "Move the missing card."},
+        json={"message": "Move the missing card."},
     )
 
     assert response.status_code == 502
     assert response.json()["detail"] == "OpenRouter returned an invalid board mutation."
     assert database.get_board() == board
+
+
+def test_ai_assistant_uses_the_persisted_board(
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    board = client.get("/api/board").json()
+    board["columns"][0]["title"] = "Saved title"
+    client.put("/api/board", json=board)
+
+    def assistant_response(request: httpx.Request) -> httpx.Response:
+        assert "Saved title" in json.loads(request.read())["messages"][-1]["content"]
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {"message": {"content": json.dumps({"reply": "Ok.", "mutations": []})}}
+                ]
+            },
+        )
+
+    mock_openrouter(monkeypatch, assistant_response)
+    response = post_assistant(client)
+
+    assert response.status_code == 200
+    assert response.json()["reply"] == "Ok."

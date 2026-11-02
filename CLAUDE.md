@@ -42,6 +42,7 @@ npm run lint
 npm run test:unit           # Vitest (src/**/*.test.ts[x])
 npx vitest run src/lib/kanban.test.ts   # single unit test file
 npm run test:e2e            # Playwright (tests/), starts next dev on 127.0.0.1:3000
+npm run test:e2e:docker     # Playwright smoke test (tests-docker/) against the running Docker app on :8000
 ```
 
 ## Architecture
@@ -52,15 +53,15 @@ npm run test:e2e            # Playwright (tests/), starts next dev on 127.0.0.1:
 
 **Network exposure.** Docker Compose publishes the app on `127.0.0.1:8000` only, because the API has no authentication.
 
-**Persistence.** `GET /api/board` reads and `PUT /api/board` replaces the whole board; there are no per-card endpoints. `backend/app/database.py` maps the board onto normalized SQLite tables (`users`, `boards`, `board_columns`, `cards`) using `position` columns for ordering, auto-creates the schema, and seeds from `initial_data.py` on first access. DB path is `data/pm.sqlite3` (override with `PM_DATABASE_PATH`); Docker mounts `./data` to `/app/data`. Schema is documented in `docs/DATABASE.md` and `docs/database-schema.json`. Everything is scoped to the hardcoded demo user `user`.
+**Persistence.** `GET /api/board` reads and `PUT /api/board` replaces the whole board; there are no per-card endpoints. `backend/app/database.py` maps the board onto normalized SQLite tables (`users`, `boards`, `board_columns`, `cards`) using `position` columns for ordering, creates the schema and seeds from `initial_data.py` once at startup (FastAPI lifespan). DB path is `data/pm.sqlite3` (override with `PM_DATABASE_PATH`); Docker mounts `./data` to `/app/data`. Schema is documented in `docs/DATABASE.md` and `docs/database-schema.json`. Everything is scoped to the hardcoded demo user `user`.
 
 **Frontend sync.** `KanbanBoard.tsx` loads the board after login, applies edits optimistically, and serializes full-board PUTs through a promise queue to preserve edit order. Sign-in (`LoginGate.tsx`, `user`/`password`) is client-side in-memory only; the API does not enforce auth.
 
-**AI assistant.** `AIChatSidebar.tsx` posts `{board, message, history}` to `POST /api/ai/assistant`. The backend calls OpenRouter (JSON mode) asking for `{reply, mutations[]}`, where mutations are a discriminated union (`create_card`, `edit_card`, `move_card`, `rename_column`). `apply_board_mutations` applies them in order to the submitted board; any invalid output or unknown ID returns 502 and nothing is saved. Valid mutations are persisted server-side and the updated board is returned for the frontend to display.
+**AI assistant.** `AIChatSidebar.tsx` waits for the board save queue to drain, then posts `{message, history}` to `POST /api/ai/assistant`; `KanbanBoard` makes the board `inert` until the reply arrives, so edits cannot race the assistant. The backend loads the persisted board, calls OpenRouter (JSON mode) asking for `{reply, mutations[]}`, where mutations are a discriminated union (`create_card`, `edit_card`, `move_card`, `rename_column`), and `apply_board_mutations` applies them in order; any invalid output or unknown ID returns 502 and nothing is saved. The backend saves valid mutations and returns the updated board, which the frontend displays without sending another `PUT`.
 
-**OpenRouter model.** The configured model is `OPENROUTER_MODEL` in `main.py` (`nvidia/nemotron-3.5-super-vl:free`; must be a `:free` model). This intentionally differs from `openai/gpt-oss-120b` in `AGENTS.md`; see the Part 8 record in `docs/PLAN.md`. The backend reads `OPENROUTER_API_KEY` from the process environment (Docker Compose loads `.env`; a local uvicorn run needs it exported).
+**OpenRouter model.** The configured model is `OPENROUTER_MODEL` in `main.py` (`nvidia/nemotron-3.5-super-vl:free`; must be a `:free` model). See the Part 8 record in `docs/PLAN.md` for why it changed from `openai/gpt-oss-120b`. The backend reads `OPENROUTER_API_KEY` from the process environment (Docker Compose loads `.env`; a local uvicorn run needs it exported).
 
 ## Testing notes
 
 - Backend tests monkeypatch `database.DB_PATH` to a temp file and mock OpenRouter; they never hit the network.
-- Playwright tests mock `/api/board` (stateful) and `/api/ai/assistant` via `page.route`, so they do not exercise the real backend. Real persistence is verified by backend tests and live Docker smoke checks.
+- Playwright tests mock `/api/board` (stateful) and `/api/ai/assistant` via `page.route`, so they do not exercise the real backend. `tests-docker/smoke.spec.ts` covers sign-in, a card move, and reload against the real Docker app, and restores the board afterward. Mocked board data comes from `src/test/fixtures.ts`, which mirrors the backend seed.

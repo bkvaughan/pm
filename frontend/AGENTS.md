@@ -19,13 +19,14 @@ This directory contains the Next.js frontend for the PM MVP. It is the current d
 - src/app/page.tsx: app entry point that renders the main board
 - src/components/LoginGate.tsx: fake username/password gate and logout action
 - src/components/KanbanBoard.tsx: board API loading, state, persistence queue, drag/drop orchestration, and responsive board/chat layout
-- src/components/AIChatSidebar.tsx: assistant conversation UI, request history, and validated AI board updates
+- src/components/AIChatSidebar.tsx: assistant conversation UI, request history, and AI board updates
 - src/components/KanbanColumn.tsx: column UI and droppable area
-- src/components/KanbanCard.tsx: card rendering and sortable behavior
+- src/components/KanbanCard.tsx: card rendering, inline editing, and sortable behavior
 - src/components/NewCardForm.tsx: inline card-creation form
 - src/components/KanbanCardPreview.tsx: drag overlay preview card
-- src/lib/kanban.ts: board data model, initial seed data, moveCard logic, and ID generator
+- src/lib/kanban.ts: board data model, moveCard logic, and ID generator
 - src/test/setup.ts: Vitest setup for DOM matchers and shared test configuration
+- src/test/fixtures.ts: test board data mirroring the backend seed (`backend/app/initial_data.py`)
 
 ## Current behavior
 
@@ -35,13 +36,13 @@ The current frontend is a single-page Kanban board demo:
 - Authentication is client-side, in-memory demo state; refreshing returns to the sign-in screen.
 - There are five default columns: Backlog, Discovery, In Progress, Review, and Done.
 - Each column shows cards and allows the user to rename the column title.
-- Cards can be dragged between columns and reorder within a column.
+- Cards can be dragged between columns and reorder within a column, with the mouse or the keyboard (Space to pick up, arrow keys to move, Space to drop).
 - Users can add a card via a small form inside each column.
-- Users can remove a card from the current column.
+- Users can edit a card's title and details inline, and remove a card from the current column.
 - The board loads from `GET /api/board` and saves changes to `PUT /api/board`.
-- Edits are optimistic in the UI and queued in order; load and save errors are shown with retry for load failures.
-- The AI sidebar sends the current board, user message, and recent conversation to `POST /api/ai/assistant`.
-- Assistant replies appear in the conversation; returned board changes update the board immediately and use the normal serialized save queue.
+- Edits are optimistic in the UI and queued in order. Load errors show a Retry button; save errors show a Reload board button that refetches the saved board.
+- The AI sidebar waits for pending board saves, then sends the user message and recent conversation to `POST /api/ai/assistant`; the backend reads the saved board itself.
+- The board is locked (`inert`) while the assistant works, and the sidebar notes that replies can take up to a minute. Returned board changes are already saved by the backend and are displayed without another save.
 - The sidebar moves below the board on smaller screens and sits beside it on wide screens.
 
 ## Core data model
@@ -66,11 +67,14 @@ The frontend uses two different test layers:
 
 1. Unit tests for board logic and component behavior
    - src/lib/kanban.test.ts checks moveCard behavior
-   - src/components/KanbanBoard.test.tsx checks API loading, renaming, adding/removing, persistence, and error recovery
+   - src/components/KanbanBoard.test.tsx checks API loading, renaming, adding/editing/removing cards, persistence, and error recovery
    - src/components/AIChatSidebar.test.tsx checks chat messages, history, board updates, and request errors
 
 2. Browser integration tests
-   - tests/kanban.spec.ts checks sign-in, board edits and drag/drop, and the AI chat board-update flow
+   - tests/kanban.spec.ts checks sign-in, board edits, mouse and keyboard drag/drop, and the AI chat board-update flow against mocked APIs
+
+3. Docker smoke test
+   - tests-docker/smoke.spec.ts runs against the Docker app on port 8000 (`npm run test:e2e:docker` after `scripts/start.sh`), moves a card, reloads, checks it persisted, and restores the board
 
 ## Rules for future changes
 
@@ -90,6 +94,7 @@ npm run dev
 npm run test
 npm run test:unit
 npm run test:e2e
+npm run test:e2e:docker
 ```
 
 ## Working assumptions for upcoming phases

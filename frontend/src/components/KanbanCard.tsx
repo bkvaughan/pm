@@ -2,18 +2,46 @@ import { useState, type FormEvent } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import clsx from "clsx";
-import type { Card } from "@/lib/kanban";
+import {
+  PRIORITIES,
+  parseLabels,
+  type Card,
+  type CardFields,
+  type Priority,
+} from "@/lib/kanban";
+import { CardMeta } from "@/components/CardMeta";
 import { PencilIcon, TrashIcon } from "@/components/icons";
 
 type KanbanCardProps = {
   card: Card;
   onDelete: (cardId: string) => void;
-  onEdit: (cardId: string, title: string, details: string) => void;
+  onEdit: (cardId: string, fields: CardFields) => void;
 };
+
+type FormState = {
+  title: string;
+  details: string;
+  priority: Priority | "";
+  dueDate: string;
+  labels: string;
+};
+
+const emptyForm: FormState = {
+  title: "",
+  details: "",
+  priority: "",
+  dueDate: "",
+  labels: "",
+};
+
+const fieldClass =
+  "w-full rounded-lg border border-[var(--stroke)] bg-white px-2.5 py-1.5 text-xs text-[var(--navy-dark)] outline-none transition focus:border-[var(--primary-blue)]";
 
 export const KanbanCard = ({ card, onDelete, onEdit }: KanbanCardProps) => {
   const [isEditing, setIsEditing] = useState(false);
-  const [formState, setFormState] = useState({ title: "", details: "" });
+  const [formState, setFormState] = useState<FormState>(emptyForm);
+  const setField = <K extends keyof FormState>(key: K, value: FormState[K]) =>
+    setFormState((prev) => ({ ...prev, [key]: value }));
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: card.id });
 
@@ -23,7 +51,13 @@ export const KanbanCard = ({ card, onDelete, onEdit }: KanbanCardProps) => {
   };
 
   const startEditing = () => {
-    setFormState({ title: card.title, details: card.details });
+    setFormState({
+      title: card.title,
+      details: card.details,
+      priority: card.priority ?? "",
+      dueDate: card.dueDate ?? "",
+      labels: card.labels.join(", "),
+    });
     setIsEditing(true);
   };
 
@@ -33,7 +67,13 @@ export const KanbanCard = ({ card, onDelete, onEdit }: KanbanCardProps) => {
     if (!title) {
       return;
     }
-    onEdit(card.id, title, formState.details.trim());
+    onEdit(card.id, {
+      title,
+      details: formState.details.trim(),
+      priority: formState.priority || null,
+      dueDate: formState.dueDate || null,
+      labels: parseLabels(formState.labels),
+    });
     setIsEditing(false);
   };
 
@@ -55,9 +95,7 @@ export const KanbanCard = ({ card, onDelete, onEdit }: KanbanCardProps) => {
         <form onSubmit={handleSubmit} className="space-y-2">
           <input
             value={formState.title}
-            onChange={(event) =>
-              setFormState((prev) => ({ ...prev, title: event.target.value }))
-            }
+            onChange={(event) => setField("title", event.target.value)}
             aria-label="Card title"
             className="w-full rounded-lg border border-[var(--stroke)] bg-white px-2.5 py-1.5 text-sm font-medium text-[var(--navy-dark)] outline-none transition focus:border-[var(--primary-blue)]"
             required
@@ -65,12 +103,41 @@ export const KanbanCard = ({ card, onDelete, onEdit }: KanbanCardProps) => {
           />
           <textarea
             value={formState.details}
-            onChange={(event) =>
-              setFormState((prev) => ({ ...prev, details: event.target.value }))
-            }
+            onChange={(event) => setField("details", event.target.value)}
             aria-label="Card details"
             rows={3}
             className="w-full resize-none rounded-lg border border-[var(--stroke)] bg-white px-2.5 py-1.5 text-xs leading-5 text-[var(--navy-dark)] outline-none transition focus:border-[var(--primary-blue)]"
+          />
+          <div className="grid grid-cols-2 gap-2">
+            <select
+              value={formState.priority}
+              onChange={(event) =>
+                setField("priority", event.target.value as Priority | "")
+              }
+              aria-label="Priority"
+              className={fieldClass}
+            >
+              <option value="">No priority</option>
+              {PRIORITIES.map((priority) => (
+                <option key={priority} value={priority}>
+                  {priority[0].toUpperCase() + priority.slice(1)}
+                </option>
+              ))}
+            </select>
+            <input
+              type="date"
+              value={formState.dueDate}
+              onChange={(event) => setField("dueDate", event.target.value)}
+              aria-label="Due date"
+              className={fieldClass}
+            />
+          </div>
+          <input
+            value={formState.labels}
+            onChange={(event) => setField("labels", event.target.value)}
+            aria-label="Labels"
+            placeholder="Labels, comma separated"
+            className={fieldClass}
           />
           <div className="flex items-center gap-2">
             <button
@@ -96,6 +163,7 @@ export const KanbanCard = ({ card, onDelete, onEdit }: KanbanCardProps) => {
           <p className="mt-1 text-xs leading-5 text-[var(--gray-text)]">
             {card.details}
           </p>
+          <CardMeta card={card} />
           <div className="absolute right-2 top-2 flex gap-0.5 rounded-lg bg-white/95 p-0.5 shadow-sm transition-opacity [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 [@media(hover:hover)]:group-focus-within:opacity-100">
             <button
               type="button"

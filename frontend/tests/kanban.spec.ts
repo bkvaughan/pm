@@ -1,32 +1,10 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 import type { BoardData } from "../src/lib/kanban";
 import { initialData } from "../src/test/fixtures";
-
-const signIn = async (page: Page) => {
-  await page.getByLabel("Username").fill("user");
-  await page.getByLabel("Password").fill("password");
-  await page.getByRole("button", { name: "Sign in" }).click();
-};
-
-const mockBoardApi = async (
-  page: Page,
-  initialBoard: BoardData = initialData
-) => {
-  let board: BoardData = structuredClone(initialBoard);
-  await page.route("**/api/board", async (route) => {
-    if (route.request().method() === "PUT") {
-      board = route.request().postDataJSON() as BoardData;
-    }
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify(board),
-    });
-  });
-};
+import { BOARD_URL, isBoardSave, mockApi, openBoard } from "./mockApi";
 
 test("requires valid credentials and supports logout", async ({ page }) => {
-  await mockBoardApi(page);
+  await mockApi(page);
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Sign in to Kanban Studio" })).toBeVisible();
   await expect(page.locator('[data-testid^="column-"]')).toHaveCount(0);
@@ -47,17 +25,17 @@ test("requires valid credentials and supports logout", async ({ page }) => {
 });
 
 test("loads the kanban board", async ({ page }) => {
-  await mockBoardApi(page);
+  await mockApi(page);
   await page.goto("/");
-  await signIn(page);
+  await openBoard(page);
   await expect(page.getByRole("heading", { name: "Kanban Studio" })).toBeVisible();
   await expect(page.locator('[data-testid^="column-"]')).toHaveCount(5);
 });
 
 test("adds a card to a column", async ({ page }) => {
-  await mockBoardApi(page);
+  await mockApi(page);
   await page.goto("/");
-  await signIn(page);
+  await openBoard(page);
   const firstColumn = page.locator('[data-testid^="column-"]').first();
   await firstColumn.getByRole("button", { name: /add a card/i }).click();
   await firstColumn.getByPlaceholder("Card title").fill("Playwright card");
@@ -67,9 +45,9 @@ test("adds a card to a column", async ({ page }) => {
 });
 
 test("moves a card between columns", async ({ page }) => {
-  await mockBoardApi(page);
+  await mockApi(page);
   await page.goto("/");
-  await signIn(page);
+  await openBoard(page);
   const card = page.getByTestId("card-card-1");
   const targetColumn = page.getByTestId("column-col-review");
   const cardBox = await card.boundingBox();
@@ -90,26 +68,28 @@ test("moves a card between columns", async ({ page }) => {
   );
   const savedBoard = page.waitForResponse(
     (response) =>
-      response.url().endsWith("/api/board") &&
-      response.request().method() === "PUT"
+      isBoardSave(response.url(), response.request().method())
   );
   await page.mouse.up();
   await expect(targetColumn.getByTestId("card-card-1")).toBeVisible();
   await savedBoard;
   await expect(page.getByTestId("board-save-status")).toHaveText("Saved");
-  await page.getByRole("button", { name: "Log out" }).click();
-  await expect(
-    page.getByRole("heading", { name: "Sign in to Kanban Studio" })
-  ).toBeVisible();
-  await signIn(page);
+  // dnd-kit swallows clicks for 50ms after a drop, so retry until it lands.
+  await expect(async () => {
+    await page.getByRole("button", { name: "Log out" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Sign in to Kanban Studio" })
+    ).toBeVisible({ timeout: 500 });
+  }).toPass();
+  await openBoard(page);
   await expect(page.getByRole("heading", { name: "Kanban Studio" })).toBeVisible();
   await expect(targetColumn.getByTestId("card-card-1")).toBeVisible();
 });
 
 test("drops a card into the column directly under the pointer", async ({ page }) => {
-  await mockBoardApi(page);
+  await mockApi(page);
   await page.goto("/");
-  await signIn(page);
+  await openBoard(page);
 
   const card = page.getByTestId("card-card-1");
   const targetCard = page.getByTestId("card-card-3");
@@ -143,9 +123,9 @@ test("drops a card into the column directly under the pointer", async ({ page })
 test("highlights a target column across its header and blank interior", async ({
   page,
 }) => {
-  await mockBoardApi(page);
+  await mockApi(page);
   await page.goto("/");
-  await signIn(page);
+  await openBoard(page);
 
   const sourceCard = page.getByTestId("card-card-1");
   const targetColumn = page.getByTestId("column-col-discovery");
@@ -189,9 +169,9 @@ test("drops a card into an empty column without targeting a card", async ({
   const board = structuredClone(initialData);
   board.columns[1].cardIds = [];
   delete board.cards["card-3"];
-  await mockBoardApi(page, board);
+  await mockApi(page, board);
   await page.goto("/");
-  await signIn(page);
+  await openBoard(page);
 
   const card = page.getByTestId("card-card-1");
   const targetColumn = page.getByTestId("column-col-discovery");
@@ -223,9 +203,9 @@ test("drops near the visible edge of an empty column", async ({ page }) => {
   const board = structuredClone(initialData);
   board.columns[1].cardIds = [];
   delete board.cards["card-3"];
-  await mockBoardApi(page, board);
+  await mockApi(page, board);
   await page.goto("/");
-  await signIn(page);
+  await openBoard(page);
 
   const card = page.getByTestId("card-card-1");
   const targetColumn = page.getByTestId("column-col-discovery");
@@ -260,9 +240,9 @@ test("moves a card from a full Review column into empty Done", async ({
   const board = structuredClone(initialData);
   board.columns[3].cardIds = ["card-6", "card-7", "card-8"];
   board.columns[4].cardIds = [];
-  await mockBoardApi(page, board);
+  await mockApi(page, board);
   await page.goto("/");
-  await signIn(page);
+  await openBoard(page);
 
   const sourceCard = page.getByTestId("card-card-6");
   const targetColumn = page.getByTestId("column-col-done");
@@ -288,8 +268,7 @@ test("moves a card from a full Review column into empty Done", async ({
 
   const savedBoard = page.waitForResponse(
     (response) =>
-      response.url().endsWith("/api/board") &&
-      response.request().method() === "PUT"
+      isBoardSave(response.url(), response.request().method())
   );
   await page.mouse.up();
   await savedBoard;
@@ -299,10 +278,10 @@ test("moves a card from a full Review column into empty Done", async ({
 test("AI chat locks the board and applies the saved board update", async ({
   page,
 }) => {
-  await mockBoardApi(page);
+  await mockApi(page);
   let finishAssistant = () => {};
   const assistantCalled = new Promise<void>((resolve) => {
-    void page.route("**/api/ai/assistant", async (route) => {
+    void page.route(`**${BOARD_URL}/assistant`, async (route) => {
       expect(route.request().postDataJSON()).toEqual({
         message: "Move the roadmap card to Discovery.",
         history: [],
@@ -326,13 +305,13 @@ test("AI chat locks the board and applies the saved board update", async ({
   });
   let boardSaves = 0;
   page.on("request", (request) => {
-    if (request.url().endsWith("/api/board") && request.method() === "PUT") {
+    if (isBoardSave(request.url(), request.method())) {
       boardSaves += 1;
     }
   });
 
   await page.goto("/");
-  await signIn(page);
+  await openBoard(page);
   await expect(page.getByTestId("card-card-1")).toBeVisible();
   await page.getByLabel("Message the assistant").fill(
     "Move the roadmap card to Discovery."
@@ -358,22 +337,21 @@ test("AI chat locks the board and applies the saved board update", async ({
 });
 
 test("edits a card and persists the change", async ({ page }) => {
-  await mockBoardApi(page);
+  await mockApi(page);
   await page.goto("/");
-  await signIn(page);
+  await openBoard(page);
   const card = page.getByTestId("card-card-1");
   await card.getByRole("button", { name: "Edit Align roadmap themes" }).click();
   await card.getByLabel("Card title").fill("Edited in e2e");
   await card.getByLabel("Card details").fill("New details.");
   const savedBoard = page.waitForResponse(
     (response) =>
-      response.url().endsWith("/api/board") &&
-      response.request().method() === "PUT"
+      isBoardSave(response.url(), response.request().method())
   );
   await card.getByRole("button", { name: "Save" }).click();
   const saved = (await savedBoard).request().postDataJSON() as BoardData;
   expect(saved.cards["card-1"]).toEqual({
-    id: "card-1",
+    ...initialData.cards["card-1"],
     title: "Edited in e2e",
     details: "New details.",
   });
@@ -381,9 +359,9 @@ test("edits a card and persists the change", async ({ page }) => {
 });
 
 test("moves a card between columns with the keyboard", async ({ page }) => {
-  await mockBoardApi(page);
+  await mockApi(page);
   await page.goto("/");
-  await signIn(page);
+  await openBoard(page);
   const card = page.getByTestId("card-card-3");
   const targetColumn = page.getByTestId("column-col-progress");
   await card.focus();

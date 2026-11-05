@@ -1,10 +1,5 @@
-import { KanbanBoard } from "@/components/KanbanBoard";
-import { LoginGate } from "@/components/LoginGate";
+import { AppShell } from "@/components/AppShell";
 
 export default function Home() {
-  return (
-    <LoginGate>
-      <KanbanBoard />
-    </LoginGate>
-  );
+  return <AppShell />;
 }

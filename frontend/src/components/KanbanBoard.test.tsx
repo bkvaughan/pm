@@ -12,15 +12,29 @@ const countSaves = () =>
     .mock.calls.filter(([, init]) => init?.method === "PUT").length;
 
 let persistedBoard: BoardData;
+let saveCount = 0;
+// One activity entry per save, so tests can see the panel refetch.
+const activityEntries = () =>
+  Array.from({ length: saveCount }, (_, index) => ({
+    id: index + 1,
+    source: "user",
+    message: `Save ${index + 1}`,
+    createdAt: new Date().toISOString(),
+  })).reverse();
 
 describe("KanbanBoard", () => {
   beforeEach(() => {
     persistedBoard = structuredClone(initialData);
+    saveCount = 0;
     vi.stubGlobal(
       "fetch",
-      vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input).endsWith("/activity")) {
+          return new Response(JSON.stringify(activityEntries()), { status: 200 });
+        }
         if (init?.method === "PUT") {
           persistedBoard = JSON.parse(String(init.body)) as BoardData;
+          saveCount += 1;
         }
         return new Response(JSON.stringify(persistedBoard), {
           status: 200,
@@ -35,13 +49,14 @@ describe("KanbanBoard", () => {
   });
 
   it("loads and renders five columns", async () => {
-    render(<KanbanBoard />);
+    render(<KanbanBoard boardId="board-1" />);
+    expect(vi.mocked(fetch).mock.calls[0][0]).toBe("/api/boards/board-1");
     expect(screen.getByRole("status")).toHaveTextContent("Loading board...");
     expect(await screen.findAllByLabelText("Column title")).toHaveLength(5);
   });
 
   it("loads and persists a renamed column", async () => {
-    render(<KanbanBoard />);
+    render(<KanbanBoard boardId="board-1" />);
     const input = (await screen.findAllByLabelText("Column title"))[0];
     await userEvent.clear(input);
     await userEvent.type(input, "New Name{Enter}");
@@ -53,7 +68,7 @@ describe("KanbanBoard", () => {
   });
 
   it("restores an emptied column title without saving", async () => {
-    render(<KanbanBoard />);
+    render(<KanbanBoard boardId="board-1" />);
     const input = (await screen.findAllByLabelText("Column title"))[0];
     await userEvent.clear(input);
     await userEvent.tab();
@@ -63,7 +78,7 @@ describe("KanbanBoard", () => {
   });
 
   it("persists added and removed cards", async () => {
-    render(<KanbanBoard />);
+    render(<KanbanBoard boardId="board-1" />);
     await screen.findAllByLabelText("Column title");
     const column = getFirstColumn();
     const addButton = within(column).getByRole("button", {
@@ -86,6 +101,9 @@ describe("KanbanBoard", () => {
         )
       ).toBe(true);
     });
+    expect(
+      Object.values(persistedBoard.cards).find((card) => card.title === "New card")
+    ).toMatchObject({ details: "Notes", priority: null, dueDate: null, labels: [] });
 
     const deleteButton = within(column).getByRole("button", {
       name: /delete new card/i,
@@ -103,7 +121,7 @@ describe("KanbanBoard", () => {
   });
 
   it("shows a visible error when a board update cannot be saved", async () => {
-    render(<KanbanBoard />);
+    render(<KanbanBoard boardId="board-1" />);
     const firstTitle = (await screen.findAllByLabelText("Column title"))[0];
     vi.stubGlobal(
       "fetch",
@@ -119,12 +137,12 @@ describe("KanbanBoard", () => {
     await userEvent.type(firstTitle, "Unsaved name{Enter}");
 
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Board save failed (500)."
+      "Unable to save changes: Request failed (500)."
     );
   });
 
   it("edits a card title and details", async () => {
-    render(<KanbanBoard />);
+    render(<KanbanBoard boardId="board-1" />);
     await screen.findAllByLabelText("Column title");
     const card = screen.getByTestId("card-card-1");
     await userEvent.click(
@@ -137,20 +155,56 @@ describe("KanbanBoard", () => {
     const detailsInput = within(card).getByLabelText("Card details");
     await userEvent.clear(detailsInput);
     await userEvent.type(detailsInput, "Updated details");
+    expect(within(card).getByLabelText("Priority")).toHaveValue("high");
+    expect(within(card).getByLabelText("Labels")).toHaveValue("Planning");
+    await userEvent.selectOptions(within(card).getByLabelText("Priority"), "low");
+    await userEvent.type(within(card).getByLabelText("Due date"), "2030-01-15");
+    const labelsInput = within(card).getByLabelText("Labels");
+    await userEvent.clear(labelsInput);
+    await userEvent.type(labelsInput, "Roadmap, roadmap , Q1");
     await userEvent.click(within(card).getByRole("button", { name: "Save" }));
 
     expect(within(card).getByText("Updated title")).toBeInTheDocument();
+    expect(within(card).getByText("Low priority")).toBeInTheDocument();
+    expect(within(card).getByText("Q1")).toBeInTheDocument();
     await vi.waitFor(() => {
       expect(persistedBoard.cards["card-1"]).toEqual({
         id: "card-1",
         title: "Updated title",
         details: "Updated details",
+        priority: "low",
+        dueDate: "2030-01-15",
+        labels: ["Roadmap", "Q1"],
+      });
+    });
+  });
+
+  it("clears card priority, due date, and labels", async () => {
+    persistedBoard.cards["card-1"].dueDate = "2030-01-15";
+    render(<KanbanBoard boardId="board-1" />);
+    await screen.findAllByLabelText("Column title");
+    const card = screen.getByTestId("card-card-1");
+    await userEvent.click(
+      within(card).getByRole("button", { name: "Edit Align roadmap themes" })
+    );
+
+    await userEvent.selectOptions(within(card).getByLabelText("Priority"), "");
+    await userEvent.clear(within(card).getByLabelText("Due date"));
+    await userEvent.clear(within(card).getByLabelText("Labels"));
+    await userEvent.click(within(card).getByRole("button", { name: "Save" }));
+
+    expect(within(card).queryByTestId("badges")).not.toBeInTheDocument();
+    await vi.waitFor(() => {
+      expect(persistedBoard.cards["card-1"]).toMatchObject({
+        priority: null,
+        dueDate: null,
+        labels: [],
       });
     });
   });
 
   it("cancels a card edit without saving", async () => {
-    render(<KanbanBoard />);
+    render(<KanbanBoard boardId="board-1" />);
     await screen.findAllByLabelText("Column title");
     const card = screen.getByTestId("card-card-1");
     await userEvent.click(
@@ -164,7 +218,7 @@ describe("KanbanBoard", () => {
   });
 
   it("reloads the saved board after a failed save", async () => {
-    render(<KanbanBoard />);
+    render(<KanbanBoard boardId="board-1" />);
     const firstTitle = (await screen.findAllByLabelText("Column title"))[0];
     vi.stubGlobal(
       "fetch",
@@ -200,9 +254,9 @@ describe("KanbanBoard", () => {
       })
     );
 
-    render(<KanbanBoard />);
+    render(<KanbanBoard boardId="board-1" />);
     expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Board request failed (503)."
+      "Request failed (503)."
     );
 
     await userEvent.click(screen.getByRole("button", { name: "Retry" }));
@@ -218,7 +272,7 @@ describe("KanbanBoard", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-        if (String(input) === "/api/ai/assistant") {
+        if (String(input) === "/api/boards/board-1/assistant") {
           await new Promise<void>((resolve) => (finishAssistant = resolve));
           return new Response(
             JSON.stringify({ reply: "Renamed.", board: updatedBoard, model: "m" }),
@@ -232,7 +286,7 @@ describe("KanbanBoard", () => {
       })
     );
     const user = userEvent.setup();
-    render(<KanbanBoard />);
+    render(<KanbanBoard boardId="board-1" />);
     await screen.findAllByLabelText("Column title");
 
     await user.type(screen.getByLabelText("Message the assistant"), "Rename");
@@ -250,5 +304,260 @@ describe("KanbanBoard", () => {
     expect(screen.getAllByLabelText("Column title")[0]).toHaveValue("Ideas");
     expect(countSaves()).toBe(0);
   });
-});
 
+  it("adds a column at the end of the board", async () => {
+    render(<KanbanBoard boardId="board-1" />);
+    await screen.findAllByLabelText("Column title");
+    await userEvent.click(screen.getByRole("button", { name: "Add column" }));
+    await userEvent.type(screen.getByLabelText("New column title"), "Blocked{Enter}");
+
+    expect(screen.getAllByLabelText("Column title")).toHaveLength(6);
+    await vi.waitFor(() => {
+      expect(persistedBoard.columns.at(-1)).toMatchObject({
+        title: "Blocked",
+        cardIds: [],
+      });
+    });
+  });
+
+  it("deletes a column and its cards after confirmation", async () => {
+    render(<KanbanBoard boardId="board-1" />);
+    await screen.findAllByLabelText("Column title");
+    const column = screen.getByTestId("column-col-backlog");
+    await userEvent.click(
+      within(column).getByRole("button", { name: "Delete column Backlog" })
+    );
+    expect(within(column).getByText("Delete this column and its 2 cards?")).toBeInTheDocument();
+    await userEvent.click(within(column).getByRole("button", { name: "Delete" }));
+
+    expect(screen.queryByTestId("column-col-backlog")).not.toBeInTheDocument();
+    await vi.waitFor(() => {
+      expect(persistedBoard.columns.map((c) => c.id)).not.toContain("col-backlog");
+    });
+    expect(persistedBoard.cards["card-1"]).toBeUndefined();
+    expect(persistedBoard.cards["card-2"]).toBeUndefined();
+  });
+
+  it("hides column delete when only one column remains", async () => {
+    const singleColumn: BoardData = {
+      columns: [{ id: "col-only", title: "Only", cardIds: [], wipLimit: null }],
+      cards: {},
+    };
+    persistedBoard = singleColumn;
+    render(<KanbanBoard boardId="board-1" />);
+    await screen.findAllByLabelText("Column title");
+
+    expect(
+      screen.queryByRole("button", { name: "Delete column Only" })
+    ).not.toBeInTheDocument();
+    expect(countSaves()).toBe(0);
+  });
+
+  describe("filters", () => {
+    const visibleCardIds = () =>
+      screen
+        .getAllByTestId(/^card-card-/)
+        .map((element) => element.dataset.testid?.replace("card-", ""));
+
+    it("searches titles, details, and labels", async () => {
+      render(<KanbanBoard boardId="board-1" />);
+      await screen.findAllByLabelText("Column title");
+
+      await userEvent.type(screen.getByLabelText("Search cards"), "design");
+
+      // card-3 has the Design label; card-5 has it in its title and label.
+      expect(visibleCardIds()).toEqual(["card-3", "card-5"]);
+      expect(screen.getByTestId("filter-summary")).toHaveTextContent(
+        "Showing 2 of 8 cards"
+      );
+      const backlog = screen.getByTestId("column-col-backlog");
+      expect(within(backlog).getByText("No matching cards")).toBeInTheDocument();
+      expect(within(backlog).getByLabelText("0 of 2 cards shown")).toHaveTextContent(
+        "0/2"
+      );
+    });
+
+    it("combines priority and label filters and clears them", async () => {
+      render(<KanbanBoard boardId="board-1" />);
+      await screen.findAllByLabelText("Column title");
+
+      const labelSelect = screen.getByLabelText("Filter by label");
+      expect(
+        within(labelSelect)
+          .getAllByRole("option")
+          .map((option) => option.textContent)
+      ).toEqual(["Any label", "Analytics", "Design", "Marketing", "Planning", "QA", "Research"]);
+
+      await userEvent.selectOptions(screen.getByLabelText("Filter by priority"), "high");
+      expect(visibleCardIds()).toEqual(["card-1", "card-5"]);
+      await userEvent.selectOptions(labelSelect, "Design");
+      expect(visibleCardIds()).toEqual(["card-5"]);
+
+      await userEvent.click(screen.getByRole("button", { name: "Clear filters" }));
+      expect(visibleCardIds()).toHaveLength(8);
+      expect(screen.queryByTestId("filter-summary")).not.toBeInTheDocument();
+    });
+
+    it("filters by due date", async () => {
+      persistedBoard.cards["card-2"].dueDate = "2000-01-01";
+      persistedBoard.cards["card-6"].dueDate = "2999-01-01";
+      render(<KanbanBoard boardId="board-1" />);
+      await screen.findAllByLabelText("Column title");
+
+      await userEvent.selectOptions(screen.getByLabelText("Filter by due date"), "overdue");
+      expect(visibleCardIds()).toEqual(["card-2"]);
+      await userEvent.selectOptions(screen.getByLabelText("Filter by due date"), "none");
+      expect(visibleCardIds()).toHaveLength(6);
+    });
+
+    it("keeps hidden cards when saving while filtered", async () => {
+      render(<KanbanBoard boardId="board-1" />);
+      await screen.findAllByLabelText("Column title");
+      await userEvent.type(screen.getByLabelText("Search cards"), "roadmap");
+      expect(visibleCardIds()).toEqual(["card-1"]);
+
+      const card = screen.getByTestId("card-card-1");
+      await userEvent.click(
+        within(card).getByRole("button", { name: "Edit Align roadmap themes" })
+      );
+      const title = within(card).getByLabelText("Card title");
+      await userEvent.clear(title);
+      await userEvent.type(title, "Align roadmap");
+      await userEvent.click(within(card).getByRole("button", { name: "Save" }));
+
+      await vi.waitFor(() =>
+        expect(persistedBoard.cards["card-1"].title).toBe("Align roadmap")
+      );
+      expect(Object.keys(persistedBoard.cards)).toHaveLength(8);
+      expect(persistedBoard.columns[0].cardIds).toEqual(["card-1", "card-2"]);
+    });
+
+    it("counts hidden cards when confirming a column delete", async () => {
+      render(<KanbanBoard boardId="board-1" />);
+      await screen.findAllByLabelText("Column title");
+      await userEvent.type(screen.getByLabelText("Search cards"), "roadmap");
+
+      const backlog = screen.getByTestId("column-col-backlog");
+      await userEvent.click(
+        within(backlog).getByRole("button", { name: "Delete column Backlog" })
+      );
+
+      expect(
+        within(backlog).getByText("Delete this column and its 2 cards?")
+      ).toBeInTheDocument();
+    });
+  });
+
+  describe("column options", () => {
+    const openOptions = async (title: string) => {
+      await userEvent.click(
+        screen.getByRole("button", { name: `Column options for ${title}` })
+      );
+      return screen.getByTestId(`column-${columnIdByTitle[title]}`);
+    };
+    const columnIdByTitle: Record<string, string> = {
+      Backlog: "col-backlog",
+      "In Progress": "col-progress",
+      Done: "col-done",
+    };
+    const columnOrder = () =>
+      screen.getAllByTestId(/^column-col-/).map((element) => element.dataset.testid);
+
+    it("moves columns left and right and persists the order", async () => {
+      render(<KanbanBoard boardId="board-1" />);
+      await screen.findAllByLabelText("Column title");
+
+      const backlog = await openOptions("Backlog");
+      expect(within(backlog).getByRole("button", { name: "Move left" })).toBeDisabled();
+      await userEvent.click(within(backlog).getByRole("button", { name: "Move right" }));
+
+      expect(columnOrder().slice(0, 2)).toEqual(["column-col-discovery", "column-col-backlog"]);
+      await vi.waitFor(() =>
+        expect(persistedBoard.columns.map((column) => column.id)).toEqual([
+          "col-discovery",
+          "col-backlog",
+          "col-progress",
+          "col-review",
+          "col-done",
+        ])
+      );
+      const done = await openOptions("Done");
+      expect(within(done).getByRole("button", { name: "Move right" })).toBeDisabled();
+      await userEvent.click(within(done).getByRole("button", { name: "Move left" }));
+      expect(columnOrder().slice(-2)).toEqual(["column-col-done", "column-col-review"]);
+    });
+
+    it("shows WIP limits and flags columns over their limit", async () => {
+      persistedBoard.columns[3].cardIds = ["card-6", "card-7", "card-8"];
+      persistedBoard.columns[4].cardIds = [];
+      render(<KanbanBoard boardId="board-1" />);
+      await screen.findAllByLabelText("Column title");
+
+      const progress = within(screen.getByTestId("column-col-progress")).getByTestId(
+        "count-badge"
+      );
+      expect(progress).toHaveTextContent("2/3");
+      expect(progress).toHaveAccessibleName("2 cards, within the WIP limit of 3");
+      const review = within(screen.getByTestId("column-col-review")).getByTestId(
+        "count-badge"
+      );
+      expect(review).toHaveTextContent("3/2");
+      expect(review).toHaveAccessibleName("3 cards, over the WIP limit of 2");
+      expect(review).toHaveClass("bg-red-600");
+    });
+
+    it("sets, clears, and rejects invalid WIP limits", async () => {
+      render(<KanbanBoard boardId="board-1" />);
+      await screen.findAllByLabelText("Column title");
+      const backlog = await openOptions("Backlog");
+      // The input remounts when the saved limit changes, so query it each time.
+      const input = () => within(backlog).getByLabelText("WIP limit");
+
+      await userEvent.type(input(), "1{Enter}");
+      await vi.waitFor(() => expect(persistedBoard.columns[0].wipLimit).toBe(1));
+      expect(within(backlog).getByTestId("count-badge")).toHaveTextContent("2/1");
+
+      await userEvent.clear(input());
+      await userEvent.type(input(), "0{Enter}");
+      expect(input()).toHaveValue(1);
+
+      await userEvent.clear(input());
+      await userEvent.tab();
+      await vi.waitFor(() => expect(persistedBoard.columns[0].wipLimit).toBeNull());
+      expect(within(backlog).getByTestId("count-badge")).toHaveTextContent("2");
+      expect(countSaves()).toBe(2);
+    });
+  });
+
+  describe("sidebar", () => {
+    it("switches tabs without losing the assistant draft", async () => {
+      render(<KanbanBoard boardId="board-1" />);
+      await screen.findAllByLabelText("Column title");
+      await userEvent.type(screen.getByLabelText("Message the assistant"), "Draft");
+
+      await userEvent.click(screen.getByRole("tab", { name: "Activity" }));
+      expect(screen.getByRole("tab", { name: "Activity" })).toHaveAttribute(
+        "aria-selected",
+        "true"
+      );
+      expect(await screen.findByText("No activity yet.")).toBeInTheDocument();
+      expect(screen.getByLabelText("Message the assistant")).not.toBeVisible();
+
+      await userEvent.click(screen.getByRole("tab", { name: "Assistant" }));
+      expect(screen.getByLabelText("Message the assistant")).toHaveValue("Draft");
+      expect(screen.queryByRole("region", { name: "Board activity" })).not.toBeInTheDocument();
+    });
+
+    it("refreshes activity after a board save", async () => {
+      render(<KanbanBoard boardId="board-1" />);
+      const input = (await screen.findAllByLabelText("Column title"))[0];
+      await userEvent.click(screen.getByRole("tab", { name: "Activity" }));
+      await screen.findByText("No activity yet.");
+
+      await userEvent.clear(input);
+      await userEvent.type(input, "Ideas{Enter}");
+
+      expect(await screen.findByText("Save 1")).toBeInTheDocument();
+    });
+  });
+});

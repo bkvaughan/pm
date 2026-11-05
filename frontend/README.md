@@ -7,7 +7,7 @@ npm install
 npm run dev
 ```
 
-Sign in with username `user` and password `password`.
+Sign in with username `user` and password `password`, or create an account. The UI needs the backend (see the root CLAUDE.md).
 
 ## Tests
 

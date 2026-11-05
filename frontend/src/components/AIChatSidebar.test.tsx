@@ -11,6 +11,7 @@ const renderSidebar = (
 ) =>
   render(
     <AIChatSidebar
+      boardId="board-1"
       waitForSaves={() => Promise.resolve()}
       onBusyChange={vi.fn()}
       onBoardUpdate={vi.fn()}
@@ -59,6 +60,7 @@ describe("AIChatSidebar", () => {
     await user.click(screen.getByRole("button", { name: "Send" }));
     expect(await screen.findByText("The board has eight cards.")).toBeInTheDocument();
 
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/boards/board-1/assistant");
     const firstRequest = JSON.parse(fetchMock.mock.calls[0][1]?.body as string);
     expect(firstRequest).toEqual({
       message: "How many columns?",

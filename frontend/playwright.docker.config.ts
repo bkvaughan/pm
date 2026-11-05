@@ -10,6 +10,8 @@ export default defineConfig({
   use: {
     baseURL: "http://127.0.0.1:8000",
     trace: "retain-on-failure",
+    // Fail stuck actions quickly so each test's cleanup still has time to run.
+    actionTimeout: 10_000,
   },
   projects: [
     {

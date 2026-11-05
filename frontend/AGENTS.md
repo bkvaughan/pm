@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This directory contains the Next.js frontend for the PM MVP. It is the current demo Kanban client that uses React, TypeScript, and the dnd-kit drag-and-drop library. This app is a frontend-only prototype at the moment; the later implementation phases will connect it to the FastAPI backend and AI chat flow.
+This directory contains the Next.js frontend: sign-in and registration, the boards home page, the Kanban board with drag and drop, account settings, and the AI chat sidebar. It is a static export served by the FastAPI backend.
 
 ## Stack and runtime
 
@@ -16,35 +16,44 @@ This directory contains the Next.js frontend for the PM MVP. It is the current d
 
 ## Project structure
 
-- src/app/page.tsx: app entry point that renders the main board
-- src/components/LoginGate.tsx: fake username/password gate and logout action
-- src/components/KanbanBoard.tsx: board API loading, state, persistence queue, drag/drop orchestration, and responsive board/chat layout
+- src/app/page.tsx: app entry point that renders AppShell
+- src/components/AppShell.tsx: session check, top bar, and navigation between boards home, a board, and account settings; keeps the open board in `?board=<id>`
+- src/components/AuthScreen.tsx: sign-in and create-account forms
+- src/components/BoardsHome.tsx: board list with create, rename, delete (inline confirmation), and open
+- src/components/AccountSettings.tsx: display name, password change, and account deletion
+- src/components/Field.tsx: labelled form input shared by the auth and account forms
+- src/components/KanbanBoard.tsx: board loading by ID, state, persistence queue, drag/drop orchestration, column add/delete, and responsive board/chat layout
+- src/components/BoardSidebar.tsx: Assistant and Activity tabs beside the board
+- src/components/ActivityPanel.tsx: the board's recent changes with relative times and an Assistant badge
 - src/components/AIChatSidebar.tsx: assistant conversation UI, request history, and AI board updates
-- src/components/KanbanColumn.tsx: column UI and droppable area
-- src/components/KanbanCard.tsx: card rendering, inline editing, and sortable behavior
+- src/components/KanbanColumn.tsx: column UI, rename, options panel (move left/right, WIP limit), delete with inline confirmation, count badge, and droppable area
+- src/components/AddColumnForm.tsx: toolbar button and inline form that appends a column
+- src/components/KanbanCard.tsx: card rendering, inline editing (title, details, priority, due date, labels), and sortable behavior
+- src/components/BoardFilters.tsx: search box and priority, label, and due-date filters with a match count and Clear filters
+- src/components/CardMeta.tsx: priority, due date (overdue/today/upcoming), and label badges
 - src/components/NewCardForm.tsx: inline card-creation form
 - src/components/KanbanCardPreview.tsx: drag overlay preview card
-- src/components/icons.tsx: inline SVG icons (edit, delete, add, send, log out)
-- src/lib/kanban.ts: board data model, moveCard logic, and ID generator
-- src/test/setup.ts: Vitest setup for DOM matchers and shared test configuration
+- src/components/icons.tsx: inline SVG icons
+- src/lib/api.ts: typed API client; every request goes through `request`, which raises `ApiError` with the server's message
+- src/lib/kanban.ts: board data model, moveCard logic, ID generator, label parsing, due-date helpers, column moves and WIP limit parsing, and card filtering (`matchesFilter`, `boardLabels`)
+- src/test/setup.ts: Vitest setup for DOM matchers
 - src/test/fixtures.ts: test board data mirroring the backend seed (`backend/app/initial_data.py`)
+- src/test/mockFetch.ts: unit-test fetch stub with handlers keyed by `"METHOD /path"`
 
 ## Current behavior
 
-The current frontend is a single-page Kanban board demo:
-
-- Sign-in is required before displaying the board. The MVP credentials are username `user` and password `password`.
-- Authentication is client-side, in-memory demo state; refreshing returns to the sign-in screen.
-- There are five default columns: Backlog, Discovery, In Progress, Review, and Done.
-- Each column shows cards and allows the user to rename the column title.
-- Cards can be dragged between columns and reorder within a column, with the mouse or the keyboard (Space to pick up, arrow keys to move, Space to drop).
-- Users can add a card via a small form inside each column.
-- Users can edit a card's title and details inline, and remove a card from the current column, using icon buttons that appear on card hover or focus (always visible on touch devices).
-- The board loads from `GET /api/board` and saves changes to `PUT /api/board`.
-- Edits are optimistic in the UI and queued in order. Load errors show a Retry button; save errors show a Reload board button that refetches the saved board.
-- The AI sidebar waits for pending board saves, then sends the user message and recent conversation to `POST /api/ai/assistant`; the backend reads the saved board itself.
-- The board is locked (`inert`) while the assistant works, and the sidebar notes that replies can take up to a minute. Returned board changes are already saved by the backend and are displayed without another save.
-- On screens 1280px and wider the app fills the viewport: a slim top bar, the five columns sharing the board width (scrolling horizontally only if needed), and the assistant sidebar beside the board. On smaller screens the sidebar moves below the board.
+- Signed-out users see the sign-in form and can switch to creating an account. The seeded demo account is `user` / `password`.
+- Sessions are HttpOnly cookies set by the backend, so a reload keeps the user signed in and reopens the board in the URL.
+- After sign-in the boards home lists the user's boards with card counts and last-updated dates. Users can create (which opens the new board), rename, delete (after an inline confirmation), and open boards.
+- The top bar shows the open board's name, a Boards link, the user's display name (opens account settings), and Log out.
+- Account settings change the display name, change the password, and delete the account after password confirmation.
+- Each column can be renamed, and deleted after an inline confirmation that names how many cards will be removed; the last column cannot be deleted. Columns are added with the Add column button in the board toolbar. A column's options button opens Move left / Move right and a WIP limit (1-99, blank for none); the count badge shows `cards/limit` and turns red when a column is over its limit. Columns share the board width (at least 170px each, so five fit at 1280px), scrolling horizontally only when there are more.
+- Cards can be dragged between columns and reordered, with the mouse or the keyboard (Space to pick up, arrow keys to move, Space to drop). Cards can be added, edited inline, and removed. The edit form sets a priority, a due date, and comma-separated labels; cards show badges for them, with overdue dates in red and dates due today in amber (based on the browser's local date).
+- The filter bar above the board searches card titles, details, and labels, and filters by priority, label, and due date (overdue, today, next 7 days, none). Filters are combined, are not saved, and only hide cards: hidden cards stay in their columns, saves include them, and column counts show `visible/total`. Visible cards can still be dragged.
+- Edits are optimistic in the UI and full-board saves are queued in order. Load errors show a Retry button; save errors show a Reload board button that refetches the saved board.
+- The AI sidebar waits for pending board saves, then sends the message and recent conversation to `POST /api/boards/{id}/assistant`. The board is locked (`inert`) while the assistant works. Returned board changes are already saved by the backend and are displayed without another save.
+- The sidebar's Activity tab lists the board's recent changes (from the backend), marking those made by the assistant, and refreshes after each save. Switching tabs keeps the assistant conversation and draft.
+- On screens 1280px and wider the board view fills the viewport with the assistant sidebar beside the board; on smaller screens the sidebar moves below the board.
 
 ## Core data model
 
@@ -52,8 +61,8 @@ The board state is represented by the BoardData type in src/lib/kanban.ts:
 
 - columns: list of Column objects
 - cards: record of card ID to Card object
-- each Column has an id, title, and cardIds array
-- each Card has an id, title, and details
+- each Column has an id, title, cardIds array, and wipLimit (number or null)
+- each Card has an id, title, details, priority (low/medium/high or null), dueDate (YYYY-MM-DD or null), and labels
 
 The moveCard helper is the main logic for drag-and-drop behavior. It handles:
 
@@ -64,25 +73,25 @@ The moveCard helper is the main logic for drag-and-drop behavior. It handles:
 
 ## Testing setup
 
-The frontend uses two different test layers:
+1. Unit tests (Vitest + Testing Library, `src/**/*.test.ts[x]`)
+   - src/lib/kanban.test.ts and src/lib/api.test.ts: moveCard logic and API error handling
+   - AppShell, AuthScreen, BoardsHome, AccountSettings, KanbanBoard, and AIChatSidebar each have a test file covering their flows and error states
+   - Run with coverage: `npx vitest run --coverage`
 
-1. Unit tests for board logic and component behavior
-   - src/lib/kanban.test.ts checks moveCard behavior
-   - src/components/KanbanBoard.test.tsx checks API loading, renaming, adding/editing/removing cards, persistence, and error recovery
-   - src/components/AIChatSidebar.test.tsx checks chat messages, history, board updates, and request errors
+2. Browser integration tests (`tests/`, mocked API)
+   - tests/mockApi.ts: stateful page.route mock of auth, the board list, and per-board data, plus `signIn` and `openBoard` helpers
+   - tests/kanban.spec.ts: sign-in, board edits, mouse and keyboard drag/drop, and the AI chat board-update flow
+   - tests/workspace.spec.ts: creating and switching boards, reload persistence, column add/delete, account settings, card details, dragging while filtered, column reorder and WIP limits, and the activity tab
 
-2. Browser integration tests
-   - tests/kanban.spec.ts checks sign-in, board edits, mouse and keyboard drag/drop, and the AI chat board-update flow against mocked APIs
-
-3. Docker smoke test
-   - tests-docker/smoke.spec.ts runs against the Docker app on port 8000 (`npm run test:e2e:docker` after `scripts/start.sh`), moves a card, reloads, checks it persisted, and restores the board
+3. Docker integration tests (`tests-docker/`, real backend)
+   - Run `npm run test:e2e:docker` after `scripts/start.sh`. Covers a full new-user journey (register, add a card, reload, second board, logout and sign back in, delete account), cross-user isolation over HTTP, and demo-board drag persistence. Each test removes the data it creates.
 
 ## Rules for future changes
 
 - Keep the architecture simple and consistent with the current structure.
 - Prefer small, focused component changes over broad rewrites.
-- Do not add database logic or AI logic directly into the UI unless the corresponding backend phase is in progress.
-- Preserve the existing board model and test style while making changes for auth, backend integration, and AI chat.
+- Keep API calls in src/lib/api.ts rather than calling fetch from components.
+- Preserve the existing board model and test style.
 - When changing board logic, update or add tests in the same area before considering the feature complete.
 
 ## Typical development commands
@@ -97,9 +106,3 @@ npm run test:unit
 npm run test:e2e
 npm run test:e2e:docker
 ```
-
-## Working assumptions for upcoming phases
-
-- The current app is a prototype and will evolve into a backend-backed, authenticated Kanban app.
-- The board should stay recognizable while the architecture shifts from local state to persisted server state.
-- The user sign-in flow, database persistence, and AI chat functionality should be added in later phases without breaking the underlying board model.

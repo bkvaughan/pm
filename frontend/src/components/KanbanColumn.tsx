@@ -1,36 +1,84 @@
+import { useState } from "react";
 import clsx from "clsx";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import type { Card, Column } from "@/lib/kanban";
+import {
+  MAX_WIP_LIMIT,
+  parseWipLimit,
+  type Card,
+  type CardFields,
+  type Column,
+} from "@/lib/kanban";
 import { KanbanCard } from "@/components/KanbanCard";
 import { NewCardForm } from "@/components/NewCardForm";
+import { MoreIcon, TrashIcon } from "@/components/icons";
 
 type KanbanColumnProps = {
   column: Column;
   cards: Card[];
   isDropTarget: boolean;
+  canDelete: boolean;
+  isFirst: boolean;
+  isLast: boolean;
   onRename: (columnId: string, title: string) => void;
+  onDelete: (columnId: string) => void;
+  onMove: (columnId: string, offset: -1 | 1) => void;
+  onSetWipLimit: (columnId: string, wipLimit: number | null) => void;
   onAddCard: (columnId: string, title: string, details: string) => void;
   onDeleteCard: (columnId: string, cardId: string) => void;
-  onEditCard: (cardId: string, title: string, details: string) => void;
+  onEditCard: (cardId: string, fields: CardFields) => void;
 };
 
 export const KanbanColumn = ({
   column,
   cards,
   isDropTarget,
+  canDelete,
+  isFirst,
+  isLast,
   onRename,
+  onDelete,
+  onMove,
+  onSetWipLimit,
   onAddCard,
   onDeleteCard,
   onEditCard,
 }: KanbanColumnProps) => {
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+  const [showOptions, setShowOptions] = useState(false);
+  const total = column.cardIds.length;
+  const isFiltered = cards.length !== total;
+  const isOverLimit = column.wipLimit !== null && total > column.wipLimit;
+  const countText = isFiltered
+    ? `${cards.length}/${total}`
+    : column.wipLimit !== null
+      ? `${total}/${column.wipLimit}`
+      : String(total);
+  const countLabel = [
+    isFiltered ? `${cards.length} of ${total} cards shown` : `${total} cards`,
+    column.wipLimit !== null &&
+      `${isOverLimit ? "over" : "within"} the WIP limit of ${column.wipLimit}`,
+  ]
+    .filter(Boolean)
+    .join(", ");
+
+  const commitWipLimit = (input: HTMLInputElement) => {
+    const wipLimit = parseWipLimit(input.value);
+    if (wipLimit === undefined) {
+      input.value = column.wipLimit?.toString() ?? "";
+      return;
+    }
+    if (wipLimit !== column.wipLimit) {
+      onSetWipLimit(column.id, wipLimit);
+    }
+  };
 
   return (
     <section
       ref={setNodeRef}
       className={clsx(
-        "flex min-h-[420px] flex-col rounded-2xl border p-3 transition",
+        "flex min-h-[420px] min-w-[170px] flex-1 basis-0 flex-col rounded-2xl border p-3 transition",
         isOver || isDropTarget
           ? "border-[var(--accent-yellow)] bg-amber-50 shadow-[0_0_0_3px_rgba(236,173,10,0.18)]"
           : "border-[var(--stroke)] bg-[rgba(3,33,71,0.03)]"
@@ -58,14 +106,109 @@ export const KanbanColumn = ({
           aria-label="Column title"
         />
         <span
-          className="shrink-0 rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-[var(--gray-text)] shadow-sm"
-          aria-label={`${cards.length} cards`}
+          className={clsx(
+            "shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold shadow-sm",
+            isOverLimit ? "bg-red-600 text-white" : "bg-white text-[var(--gray-text)]"
+          )}
+          aria-label={countLabel}
+          title={countLabel}
+          data-testid="count-badge"
         >
-          {cards.length}
+          {countText}
         </span>
+        <button
+          type="button"
+          onClick={() => setShowOptions((open) => !open)}
+          aria-label={`Column options for ${column.title}`}
+          aria-expanded={showOptions}
+          title="Column options"
+          className="shrink-0 rounded-md p-1 text-[var(--gray-text)] transition hover:bg-white hover:text-[var(--primary-blue)]"
+        >
+          <MoreIcon width={13} height={13} />
+        </button>
+        {canDelete && (
+          <button
+            type="button"
+            onClick={() => setIsConfirmingDelete(true)}
+            aria-label={`Delete column ${column.title}`}
+            title="Delete column"
+            className="shrink-0 rounded-md p-1 text-[var(--gray-text)] transition hover:bg-red-50 hover:text-red-600"
+          >
+            <TrashIcon width={13} height={13} />
+          </button>
+        )}
       </div>
+      {showOptions && (
+        <div
+          className="mt-2 space-y-2 rounded-lg border border-[var(--stroke)] bg-white p-2 text-xs"
+          data-testid="options-panel"
+        >
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => onMove(column.id, -1)}
+              disabled={isFirst}
+              className="flex-1 rounded-md border border-[var(--stroke)] px-2 py-1 font-semibold text-[var(--navy-dark)] transition hover:border-[var(--primary-blue)] disabled:opacity-40"
+            >
+              Move left
+            </button>
+            <button
+              type="button"
+              onClick={() => onMove(column.id, 1)}
+              disabled={isLast}
+              className="flex-1 rounded-md border border-[var(--stroke)] px-2 py-1 font-semibold text-[var(--navy-dark)] transition hover:border-[var(--primary-blue)] disabled:opacity-40"
+            >
+              Move right
+            </button>
+          </div>
+          <label className="flex items-center justify-between gap-2 font-semibold text-[var(--navy-dark)]">
+            WIP limit
+            <input
+              key={column.wipLimit ?? "none"}
+              type="number"
+              min={1}
+              max={MAX_WIP_LIMIT}
+              defaultValue={column.wipLimit ?? ""}
+              placeholder="None"
+              onBlur={(event) => commitWipLimit(event.target)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.currentTarget.blur();
+                }
+              }}
+              className="w-20 rounded-md border border-[var(--stroke)] px-2 py-1 font-normal outline-none focus:border-[var(--primary-blue)]"
+            />
+          </label>
+        </div>
+      )}
+      {isConfirmingDelete && (
+        <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg bg-red-50 p-2 text-xs">
+          <span className="flex-1 font-semibold text-red-700">
+            {column.cardIds.length
+              ? `Delete this column and its ${column.cardIds.length} ${column.cardIds.length === 1 ? "card" : "cards"}?`
+              : "Delete this column?"}
+          </span>
+          <button
+            type="button"
+            onClick={() => onDelete(column.id)}
+            className="rounded-md bg-red-600 px-2.5 py-1 font-semibold text-white"
+          >
+            Delete
+          </button>
+          <button
+            type="button"
+            onClick={() => setIsConfirmingDelete(false)}
+            className="rounded-md px-2.5 py-1 font-semibold text-[var(--gray-text)]"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
       <div className="mt-3 flex flex-col gap-2">
-        <SortableContext items={column.cardIds} strategy={verticalListSortingStrategy}>
+        <SortableContext
+          items={cards.map((card) => card.id)}
+          strategy={verticalListSortingStrategy}
+        >
           {cards.map((card) => (
             <KanbanCard
               key={card.id}
@@ -77,7 +220,7 @@ export const KanbanColumn = ({
         </SortableContext>
         {cards.length === 0 && (
           <div className="rounded-xl border border-dashed border-[rgba(3,33,71,0.15)] px-3 py-8 text-center text-xs font-semibold text-[var(--gray-text)]">
-            Drop a card here
+            {column.cardIds.length ? "No matching cards" : "Drop a card here"}
           </div>
         )}
       </div>

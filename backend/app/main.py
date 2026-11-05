@@ -1,18 +1,34 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
-import logging
-import os
-from typing import Annotated, Any, Literal, Union
-from uuid import uuid4
+from typing import Annotated, Any
 
-import httpx
-from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from fastapi import Cookie, Depends, FastAPI, HTTPException, Query, Response, status
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app import database
+from app.assistant import (
+    OPENROUTER_MODEL,
+    AIAssistantRequest,
+    AIAssistantResponse,
+    run_assistant,
+)
+from app.models import (
+    ActivityEntry,
+    BoardData,
+    BoardNameRequest,
+    BoardSummary,
+    ChangePasswordRequest,
+    DeleteAccountRequest,
+    LoginRequest,
+    RegisterRequest,
+    UpdateAccountRequest,
+    User,
+)
+from app.security import hash_password, verify_password
+
+SESSION_COOKIE = "pm_session"
 
 
 @asynccontextmanager
@@ -21,264 +37,48 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     yield
 
 
-app = FastAPI(title="PM MVP Backend", lifespan=lifespan)
-logger = logging.getLogger(__name__)
+app = FastAPI(title="Kanban Studio", lifespan=lifespan)
 
 project_root = Path(__file__).resolve().parents[2]
 frontend_dist = project_root / "frontend" / "out"
-OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
-OPENROUTER_MODEL = "nvidia/nemotron-3.5-super-vl:free"
-OPENROUTER_TIMEOUT = 30.0
 
 
-class BoardCard(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    id: str = Field(min_length=1)
-    title: str = Field(min_length=1)
-    details: str
-
-
-class BoardColumn(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    id: str = Field(min_length=1)
-    title: str = Field(min_length=1)
-    cardIds: list[str]
-
-
-class BoardData(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    columns: list[BoardColumn] = Field(min_length=1)
-    cards: dict[str, BoardCard]
-
-    @model_validator(mode="after")
-    def validate_card_membership(self) -> "BoardData":
-        column_ids = [column.id for column in self.columns]
-        if len(column_ids) != len(set(column_ids)):
-            raise ValueError("Column IDs must be unique.")
-
-        listed_card_ids = [
-            card_id for column in self.columns for card_id in column.cardIds
-        ]
-        if len(listed_card_ids) != len(set(listed_card_ids)):
-            raise ValueError("Each card must appear in exactly one column.")
-        if set(listed_card_ids) != set(self.cards):
-            raise ValueError("Columns must reference every card exactly once.")
-        if any(card_id != card.id for card_id, card in self.cards.items()):
-            raise ValueError("Card IDs must match their map keys.")
-        return self
-
-
-class ConversationMessage(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    role: Literal["user", "assistant"]
-    content: str = Field(min_length=1, max_length=4000)
-
-
-class CreateCardMutation(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    action: Literal["create_card"]
-    column_id: str = Field(min_length=1)
-    title: str = Field(min_length=1)
-    details: str
-
-
-class EditCardMutation(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    action: Literal["edit_card"]
-    card_id: str = Field(min_length=1)
-    title: str | None = Field(default=None, min_length=1)
-    details: str | None = None
-
-    @model_validator(mode="after")
-    def require_card_changes(self) -> "EditCardMutation":
-        if self.title is None and self.details is None:
-            raise ValueError("Edit mutation must change title or details.")
-        return self
-
-
-class MoveCardMutation(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    action: Literal["move_card"]
-    card_id: str = Field(min_length=1)
-    column_id: str = Field(min_length=1)
-
-
-class RenameColumnMutation(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    action: Literal["rename_column"]
-    column_id: str = Field(min_length=1)
-    title: str = Field(min_length=1)
-
-
-BoardMutation = Annotated[
-    Union[
-        CreateCardMutation,
-        EditCardMutation,
-        MoveCardMutation,
-        RenameColumnMutation,
-    ],
-    Field(discriminator="action"),
-]
-
-
-class AIAssistantRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    message: str = Field(min_length=1, max_length=4000)
-    history: list[ConversationMessage] = Field(default_factory=list, max_length=20)
-
-
-class AIAssistantResponse(BaseModel):
-    reply: str
-    board: BoardData | None = None
-    model: str
-
-
-class AIAssistantOutput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    reply: str = Field(min_length=1)
-    mutations: list[BoardMutation] = Field(max_length=20)
-
-
-async def openrouter_completion(
-    messages: list[dict[str, str]],
-    *,
-    json_mode: bool = False,
+def session_token(
+    pm_session: Annotated[str | None, Cookie()] = None,
 ) -> str:
-    api_key = os.getenv("OPENROUTER_API_KEY")
-    if not api_key:
-        raise HTTPException(
-            status_code=503,
-            detail="OPENROUTER_API_KEY is not configured.",
-        )
-
-    request_body: dict[str, Any] = {
-        "model": OPENROUTER_MODEL,
-        "messages": messages,
-    }
-    if json_mode:
-        request_body["response_format"] = {"type": "json_object"}
-
-    try:
-        async with httpx.AsyncClient(timeout=OPENROUTER_TIMEOUT) as client:
-            response = await client.post(
-                OPENROUTER_URL,
-                headers={"Authorization": f"Bearer {api_key}"},
-                json=request_body,
-            )
-    except httpx.TimeoutException as error:
-        logger.warning("OpenRouter request timed out.")
-        raise HTTPException(
-            status_code=504, detail="OpenRouter request timed out."
-        ) from error
-    except httpx.RequestError as error:
-        logger.error("OpenRouter request failed (%s).", type(error).__name__)
-        raise HTTPException(
-            status_code=502, detail="Unable to reach OpenRouter."
-        ) from error
-
-    if response.is_error:
-        logger.warning("OpenRouter returned HTTP %s.", response.status_code)
-        if response.status_code in (401, 403):
-            detail = "OpenRouter rejected the API key."
-        else:
-            detail = f"OpenRouter request failed with status {response.status_code}."
-        raise HTTPException(status_code=502, detail=detail)
-
-    try:
-        payload = response.json()
-        content = payload["choices"][0]["message"]["content"]
-    except (ValueError, KeyError, IndexError, TypeError) as error:
-        logger.error("OpenRouter response did not contain a valid completion.")
-        raise HTTPException(
-            status_code=502, detail="OpenRouter returned an invalid response."
-        ) from error
-
-    if not isinstance(content, str):
-        logger.error("OpenRouter completion content was not text.")
-        raise HTTPException(
-            status_code=502, detail="OpenRouter returned an invalid response."
-        )
-    return content
+    if not pm_session:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not signed in.")
+    return pm_session
 
 
-def apply_board_mutations(
-    board: BoardData,
-    mutations: list[BoardMutation],
-) -> BoardData:
-    board_data = board.model_dump()
-    for mutation in mutations:
-        if isinstance(mutation, CreateCardMutation):
-            column = next(
-                (
-                    column
-                    for column in board_data["columns"]
-                    if column["id"] == mutation.column_id
-                ),
-                None,
-            )
-            if column is None:
-                raise ValueError("Create mutation references an unknown column.")
-            card_id = f"card-{uuid4().hex}"
-            board_data["cards"][card_id] = {
-                "id": card_id,
-                "title": mutation.title,
-                "details": mutation.details,
-            }
-            column["cardIds"].append(card_id)
-        elif isinstance(mutation, EditCardMutation):
-            card = board_data["cards"].get(mutation.card_id)
-            if card is None:
-                raise ValueError("Edit mutation references an unknown card.")
-            if mutation.title is not None:
-                card["title"] = mutation.title
-            if mutation.details is not None:
-                card["details"] = mutation.details
-        elif isinstance(mutation, MoveCardMutation):
-            card = board_data["cards"].get(mutation.card_id)
-            target_column = next(
-                (
-                    column
-                    for column in board_data["columns"]
-                    if column["id"] == mutation.column_id
-                ),
-                None,
-            )
-            if card is None or target_column is None:
-                raise ValueError("Move mutation references an unknown card or column.")
-            for column in board_data["columns"]:
-                if mutation.card_id in column["cardIds"]:
-                    column["cardIds"].remove(mutation.card_id)
-                    break
-            target_column["cardIds"].append(mutation.card_id)
-        else:
-            column = next(
-                (
-                    column
-                    for column in board_data["columns"]
-                    if column["id"] == mutation.column_id
-                ),
-                None,
-            )
-            if column is None:
-                raise ValueError("Rename mutation references an unknown column.")
-            column["title"] = mutation.title
-
-    return BoardData.model_validate(board_data)
+def current_user(token: Annotated[str, Depends(session_token)]) -> dict[str, Any]:
+    user = database.get_session_user(token)
+    if user is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Not signed in.")
+    return user
 
 
-@app.get("/api/hello")
-def hello() -> dict[str, str]:
-    return {"message": "hello from PM MVP", "status": "ok"}
+CurrentUser = Annotated[dict[str, Any], Depends(current_user)]
+
+
+def owned_board(board_id: str, user: CurrentUser) -> dict[str, Any]:
+    summary = database.get_board_summary(user["id"], board_id)
+    if summary is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Board not found.")
+    return summary
+
+
+OwnedBoard = Annotated[dict[str, Any], Depends(owned_board)]
+
+
+def start_session(response: Response, user_id: str) -> None:
+    response.set_cookie(
+        SESSION_COOKIE,
+        database.create_session(user_id),
+        max_age=int(database.SESSION_LIFETIME.total_seconds()),
+        httponly=True,
+        samesite="lax",
+    )
 
 
 @app.get("/health")
@@ -286,76 +86,129 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@app.get("/api/board", response_model=BoardData)
-def read_board() -> dict[str, Any]:
-    return database.get_board()
+# Authentication and account
 
 
-@app.put("/api/board", response_model=BoardData)
-def update_board(board: BoardData) -> dict[str, Any]:
-    board_data = board.model_dump()
-    database.save_board(board_data)
+@app.post("/api/auth/register", response_model=User, status_code=201)
+def register(request: RegisterRequest, response: Response) -> dict[str, Any]:
+    try:
+        user = database.create_user(
+            request.username, request.displayName, hash_password(request.password)
+        )
+    except database.UsernameTakenError as error:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, "That username is already taken."
+        ) from error
+    start_session(response, user["id"])
+    return user
+
+
+@app.post("/api/auth/login", response_model=User)
+def login(request: LoginRequest, response: Response) -> dict[str, Any]:
+    credentials = database.get_credentials(request.username)
+    if credentials is None or not verify_password(request.password, credentials[1]):
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, "Incorrect username or password."
+        )
+    start_session(response, credentials[0]["id"])
+    return credentials[0]
+
+
+@app.post("/api/auth/logout", status_code=204)
+def logout(
+    response: Response, pm_session: Annotated[str | None, Cookie()] = None
+) -> None:
+    if pm_session:
+        database.delete_session(pm_session)
+    response.delete_cookie(SESSION_COOKIE)
+
+
+@app.get("/api/auth/me", response_model=User)
+def me(user: CurrentUser) -> dict[str, Any]:
+    return user
+
+
+@app.patch("/api/account", response_model=User)
+def update_account(request: UpdateAccountRequest, user: CurrentUser) -> dict[str, Any]:
+    return database.update_display_name(user["id"], request.displayName)
+
+
+@app.post("/api/account/password", status_code=204)
+def change_password(
+    request: ChangePasswordRequest,
+    user: CurrentUser,
+    token: Annotated[str, Depends(session_token)],
+) -> None:
+    if not verify_password(request.currentPassword, database.get_password_hash(user["id"])):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Current password is incorrect.")
+    database.update_password(user["id"], hash_password(request.newPassword), token)
+
+
+@app.post("/api/account/delete", status_code=204)
+def delete_account(
+    request: DeleteAccountRequest, user: CurrentUser, response: Response
+) -> None:
+    if not verify_password(request.password, database.get_password_hash(user["id"])):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "Password is incorrect.")
+    database.delete_user(user["id"])
+    response.delete_cookie(SESSION_COOKIE)
+
+
+# Boards
+
+
+@app.get("/api/boards", response_model=list[BoardSummary])
+def list_boards(user: CurrentUser) -> list[dict[str, Any]]:
+    return database.list_boards(user["id"])
+
+
+@app.post("/api/boards", response_model=BoardSummary, status_code=201)
+def create_board(request: BoardNameRequest, user: CurrentUser) -> dict[str, Any]:
+    return database.create_board(user["id"], request.name)
+
+
+@app.patch("/api/boards/{board_id}", response_model=BoardSummary)
+def rename_board(
+    request: BoardNameRequest, board: OwnedBoard, user: CurrentUser
+) -> dict[str, Any]:
+    return database.rename_board(user["id"], board["id"], request.name)
+
+
+@app.delete("/api/boards/{board_id}", status_code=204)
+def delete_board(board: OwnedBoard) -> None:
+    database.delete_board(board["id"])
+
+
+@app.get("/api/boards/{board_id}", response_model=BoardData)
+def read_board(board: OwnedBoard) -> dict[str, Any]:
+    return database.get_board(board["id"])
+
+
+@app.put("/api/boards/{board_id}", response_model=BoardData)
+def update_board(data: BoardData, board: OwnedBoard) -> dict[str, Any]:
+    board_data = data.model_dump(mode="json")
+    database.save_board(board["id"], board_data)
     return board_data
 
 
-@app.post("/api/ai/assistant", response_model=AIAssistantResponse)
+@app.post("/api/boards/{board_id}/assistant", response_model=AIAssistantResponse)
 async def assist_with_board(
-    request: AIAssistantRequest,
+    request: AIAssistantRequest, board: OwnedBoard
 ) -> AIAssistantResponse:
-    instructions = (
-        "You are a project board assistant. Answer the user's request using the "
-        "provided board and conversation. Return only a JSON object with exactly "
-        'these fields: {"reply": string, "mutations": array}. Use an empty '
-        "mutations array when no board change is requested. Mutations must be "
-        "explicit and use only these shapes: "
-        '{"action":"create_card","column_id":"...","title":"...","details":"..."}; '
-        '{"action":"edit_card","card_id":"...","title":"..."} (title and/or '
-        "details may be supplied); "
-        '{"action":"move_card","card_id":"...","column_id":"..."}; '
-        '{"action":"rename_column","column_id":"...","title":"..."}. '
-        "Only use IDs present in the board for existing cards and columns. "
-        "For a new card, do not invent an ID."
-    )
-    board = BoardData.model_validate(database.get_board())
-    messages = [{"role": "system", "content": instructions}]
-    messages.extend(message.model_dump() for message in request.history)
-    messages.append(
-        {
-            "role": "user",
-            "content": (
-                f"Current board JSON:\n{board.model_dump_json()}\n\n"
-                f"User request:\n{request.message}"
-            ),
-        }
-    )
+    current = BoardData.model_validate(database.get_board(board["id"]))
+    reply, updated_board = await run_assistant(current, request)
+    if updated_board is not None:
+        database.save_board(
+            board["id"], updated_board.model_dump(mode="json"), source="assistant"
+        )
+    return AIAssistantResponse(reply=reply, board=updated_board, model=OPENROUTER_MODEL)
 
-    content = await openrouter_completion(messages, json_mode=True)
-    try:
-        assistant_output = AIAssistantOutput.model_validate_json(content)
-    except ValueError as error:
-        logger.error("OpenRouter returned invalid structured assistant output.")
-        raise HTTPException(
-            status_code=502,
-            detail="OpenRouter returned an invalid assistant response.",
-        ) from error
 
-    try:
-        updated_board = apply_board_mutations(board, assistant_output.mutations)
-    except ValueError as error:
-        logger.error("OpenRouter returned a mutation invalid for the submitted board.")
-        raise HTTPException(
-            status_code=502,
-            detail="OpenRouter returned an invalid board mutation.",
-        ) from error
-
-    if assistant_output.mutations:
-        database.save_board(updated_board.model_dump())
-
-    return AIAssistantResponse(
-        reply=assistant_output.reply,
-        board=updated_board if assistant_output.mutations else None,
-        model=OPENROUTER_MODEL,
-    )
+@app.get("/api/boards/{board_id}/activity", response_model=list[ActivityEntry])
+def board_activity(
+    board: OwnedBoard, limit: Annotated[int, Query(ge=1, le=200)] = 50
+) -> list[dict[str, Any]]:
+    return database.list_activity(board["id"], limit)
 
 
 if frontend_dist.exists():

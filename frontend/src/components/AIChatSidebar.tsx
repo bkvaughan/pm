@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { BoardData } from "@/lib/kanban";
+import { api } from "@/lib/api";
 import { SendIcon } from "@/components/icons";
 
 type ChatMessage = {
@@ -10,18 +11,15 @@ type ChatMessage = {
   content: string;
 };
 
-type AIAssistantResponse = {
-  reply: string;
-  board: BoardData | null;
-};
-
 type AIChatSidebarProps = {
+  boardId: string;
   waitForSaves: () => Promise<void>;
   onBusyChange: (isBusy: boolean) => void;
   onBoardUpdate: (board: BoardData) => void;
 };
 
 export const AIChatSidebar = ({
+  boardId,
   waitForSaves,
   onBusyChange,
   onBoardUpdate,
@@ -59,30 +57,11 @@ export const AIChatSidebar = ({
 
     try {
       await waitForSaves();
-      const response = await fetch("/api/ai/assistant", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message,
-          history: messages.slice(-20).map(({ role, content }) => ({
-            role,
-            content,
-          })),
-        }),
-      });
-
-      if (!response.ok) {
-        const errorPayload = (await response.json().catch(() => null)) as {
-          detail?: string;
-        } | null;
-        setError(
-          errorPayload?.detail ??
-            `Assistant request failed (${response.status}).`
-        );
-        return;
-      }
-
-      const payload = (await response.json()) as AIAssistantResponse;
+      const payload = await api.askAssistant(
+        boardId,
+        message,
+        messages.slice(-20).map(({ role, content }) => ({ role, content }))
+      );
 
       setMessages((current) => [
         ...current,
@@ -108,9 +87,9 @@ export const AIChatSidebar = ({
   };
 
   return (
-    <aside
+    <section
       aria-label="AI project assistant"
-      className="flex h-[480px] min-h-0 flex-col overflow-hidden rounded-2xl border border-[var(--stroke)] bg-white shadow-[0_4px_12px_rgba(3,33,71,0.06)] xl:h-auto"
+      className="flex min-h-0 flex-1 flex-col"
     >
       <header className="flex items-center gap-3 border-b border-[var(--stroke)] px-4 py-3">
         <span className="h-2 w-2 shrink-0 rounded-full bg-[var(--secondary-purple)]" />
@@ -190,6 +169,6 @@ export const AIChatSidebar = ({
           </button>
         </div>
       </form>
-    </aside>
+    </section>
   );
 };

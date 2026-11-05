@@ -8,13 +8,13 @@ Status: Approved execution plan. Database schema sign-off was recorded on 2026-1
 
 - Frontend: Next.js 16 static export, React 19, TypeScript, and Tailwind CSS; FastAPI serves the export at `/`.
 - Backend: Python FastAPI in a Docker image, with `uv` managing Python dependencies.
-- Database: SQLite created automatically on board access; Docker persists it in the ignored repository `data/` directory.
-- MVP sign-in: client-side in-memory demo gate with username `user` and password `password`; refresh requires signing in again. No credentials are stored in the database, and authentication is not yet enforced by the API.
-- Ownership: the backend currently addresses the single demo user (`user`); schema supports future users, each with one board.
-- Board API: `GET /api/board` retrieves the current board and `PUT /api/board` validates and replaces the board as a whole. Replacement keeps CRUD, movement, and renaming simple and consistent with the current frontend shape.
-- Database model: normalized `users`, `boards`, `board_columns`, and `cards`; text IDs align with the frontend, integer positions store column/card ordering, foreign keys cascade dependent deletes, and a composite card-to-column key prevents cross-board references.
+- Database: SQLite created and migrated at startup; Docker persists it in the ignored repository `data/` directory.
+- Authentication (Part 11): users register and sign in against the API; passwords are scrypt-hashed; sessions are HttpOnly `pm_session` cookies backed by hashed tokens in SQLite. Every board and account route requires a session. The seeded demo account is `user` / `password`.
+- Ownership: each user owns any number of boards; board routes return 404 for boards the user does not own.
+- Board API: `GET /api/boards/{id}` retrieves a board and `PUT /api/boards/{id}` validates and replaces it as a whole. Replacement keeps CRUD, movement, and renaming simple and consistent with the frontend shape. Board metadata uses `GET/POST /api/boards` and `PATCH/DELETE /api/boards/{id}`.
+- Database model: normalized `users`, `sessions`, `boards`, `board_columns`, and `cards`; column and card IDs are scoped to their board by composite keys, integer positions store ordering, and foreign keys cascade dependent deletes. See `docs/DATABASE.md`.
 - Frontend sync: board loads after login; edits are optimistic and full-board saves are serialized through a promise queue to preserve edit order. The UI reports load/save errors, provides retry for load failures, and indicates saving status.
-- Frontend test boundary: Playwright board-flow tests mock `/api/board`; separate backend tests and a live Docker HTTP smoke check verify actual SQLite persistence.
+- Frontend test boundary: Playwright tests mock the API (`tests/mockApi.ts`); backend tests and the Docker integration tests (`tests-docker/`) verify real auth, isolation, and SQLite persistence.
 - Local scripts: platform-specific start/stop scripts use Docker Compose; the macOS/Linux start script runs Compose detached, and Docker Compose logs can be followed separately.
 - AI: configured OpenRouter model is `nvidia/nemotron-3.5-super-vl:free`; key comes from project-root `.env`.
 - UI colors: yellow `#ecad0a`, blue `#209dd7`, purple `#753991`, navy `#032147`, and gray `#888888`.
@@ -302,3 +302,80 @@ The agent should proceed in order, completing the tests for each phase before mo
 The action plan in `docs/code_review.md` is complete. Added inline card editing, a Reload board action after a failed save, keyboard drag and drop, a wait-time note in the assistant sidebar, a locked `backend/uv.lock` with `uv sync --frozen` in Docker, a Playwright smoke test against the Docker app (`npm run test:e2e:docker`), database initialization at startup, and repository cleanups.
 
 Validation record: 17 backend tests, 20 frontend unit tests, 12 mocked Playwright tests, and 1 Docker smoke test passed, along with lint and the static build.
+
+## Part 11: User management and multiple boards (2026-11-05)
+
+Goal: Turn the single-board demo into a multi-user app where each user manages several boards.
+
+Completed:
+- [x] Real accounts: registration, sign-in, sign-out, and session restore on reload (HttpOnly cookie sessions, scrypt password hashes, hashed session tokens, 30-day expiry with pruning).
+- [x] Account settings: change display name, change password (signs out other sessions), delete account (password confirmation, cascades to boards).
+- [x] Multiple boards per user: list with card counts and last-updated dates, create, rename, delete with inline confirmation, and open; the open board is kept in the `?board=` URL parameter.
+- [x] Per-board ownership checks on every board route, including the AI assistant (`POST /api/boards/{id}/assistant`).
+- [x] Columns can be added and deleted (with inline confirmation; the last column cannot be deleted). The board layout fits any number of columns.
+- [x] Composite `(board_id, id)` keys for columns and cards, fixing the cross-board ID collision noted in the earlier schema.
+- [x] Startup migration from the single-board schema that keeps the existing demo board (verified against the real `data/pm.sqlite3`).
+- [x] Backend split into `models.py`, `security.py`, `assistant.py`, `database.py`, and `main.py`.
+
+Validation record: 72 backend tests (auth, boards, isolation, validation, assistant, migration), 46 frontend unit tests (about 90% statement coverage), 16 mocked Playwright tests, and 3 Docker integration tests (full new-user journey, cross-user isolation over HTTP, demo-board drag persistence) passed, along with lint and the static build.
+
+## Part 12: Card details (2026-11-05)
+
+Goal: Give cards the details a project tracker needs.
+
+Completed:
+- [x] Cards have an optional priority (low, medium, high), an optional due date, and up to 10 labels; the fields default when omitted, and labels are trimmed and deduplicated case-insensitively.
+- [x] Schema version 2 adds the card columns; `MIGRATIONS` upgrades a version-1 database in place (verified against the real `data/pm.sqlite3`).
+- [x] The card editor sets priority, due date, and comma-separated labels; cards and the drag preview show badges, with overdue and due-today states.
+- [x] The AI assistant can set card details on create and edit, and clear priority or due date with null; the prompt includes today's date.
+- [x] The demo seed has priorities and labels.
+
+Validation record: 89 backend tests, 57 frontend unit tests, 17 mocked Playwright tests, and 3 Docker integration tests (the new-user journey now saves card details and checks them after a reload) passed, along with lint, a clean `tsc`, and the static build.
+
+## Part 13: Search and filters (2026-11-05)
+
+Goal: Find cards quickly on busy boards.
+
+Completed:
+- [x] A filter bar searches titles, details, and labels and filters by priority, label (from the board's labels), and due date (overdue, today, next 7 days, no due date), with a match count and Clear filters.
+- [x] Filtering is client-side and only hides cards: hidden cards keep their positions and are included in saves; columns show `visible/total` counts and "No matching cards"; column delete confirmations count hidden cards.
+- [x] Visible cards can still be dragged while filtered.
+
+Validation record: 89 backend tests, 80 frontend unit tests, 18 mocked Playwright tests (repeated 5 times with no failures), and 3 Docker integration tests passed, along with lint, `tsc`, and the static build. Root cause found for a click lost after a drag in the new e2e test: dnd-kit's 50ms post-drop click suppression (test retries the click). The keyboard drag test that failed once in 85 runs in Part 12 did not reproduce in 180 further runs.
+
+## Part 14: Column management (2026-11-05)
+
+Goal: Let teams shape their workflow columns.
+
+Completed:
+- [x] A column options panel moves a column left or right (buttons rather than drag and drop, which keeps it accessible and avoids nesting a second sortable context around the card drag-and-drop).
+- [x] Per-column WIP limits (1-99, blank for none): the count badge shows `cards/limit` and turns red over the limit. Limits are advisory and never block a move.
+- [x] Schema version 3 adds `board_columns.wip_limit`; verified upgrading the real `data/pm.sqlite3` from version 2.
+- [x] The AI assistant can set or clear WIP limits (`set_wip_limit`) and is told to mention when a change exceeds one.
+- [x] The Docker playwright config sets a 10s action timeout so a stuck step fails fast and test cleanup always runs.
+- [x] Fixed a layout regression from Part 11: a 220px column minimum plus the end-of-row Add column slot made the default board 1408px wide in a 940px container at 1280px, so it scrolled horizontally. Besides the extra scrolling, dnd-kit auto-scrolled the board mid-drag, so drops intermittently landed in the wrong column (evidence: "moves a card between columns" failed 3 in 15 runs, with the card dropped over a Done card). Add column moved to the toolbar and the column minimum is 170px; a Playwright test now asserts no overflow at 1280px. The drag test then passed 30 of 30 and the full suite 100 of 100. The intermittent keyboard drag failure in Part 12 began with the same layout change and was most likely the same cause.
+
+Validation record: 102 backend tests, 93 frontend unit tests, 20 mocked Playwright tests (300 further full-suite runs after the layout fix had one failure, a drag-highlight `toHaveClass` assertion in a run right after a Docker image build; not reproduced since, cause unknown), and 3 Docker integration tests (the journey now reorders a column, sets a WIP limit, and checks both after a reload) passed, along with lint, `tsc`, and the static build.
+
+## Part 15: Activity log (2026-11-05)
+
+Goal: Show what changed on a board, and who (user or assistant) changed it.
+
+Completed:
+- [x] `describe_changes` turns each full-board save into readable messages (cards created, edited with the changed fields, moved, deleted; columns added, renamed, deleted, reordered; WIP limits set or removed). Reorders within a column are not logged.
+- [x] Schema version 4 adds the `activity` table; entries are written in the save transaction, tagged `user` or `assistant`, and pruned to the newest 200 per board. Board create and rename are logged.
+- [x] `GET /api/boards/{id}/activity` (owner only, `limit` 1-200).
+- [x] The sidebar has Assistant and Activity tabs; the activity list refreshes after saves and keeps the chat intact across tab switches.
+
+Validation record: 119 backend tests, 102 frontend unit tests (about 93% statement coverage), 21 mocked Playwright tests (repeated 3 times with no failures), and 3 Docker integration tests (the journey now checks the exact activity messages recorded by the real backend) passed, along with lint, `tsc`, and the static build. The demo-board drag test leaves two activity entries (the move and its restore), which are real history.
+
+## Roadmap for later iterations
+
+Each item ships with backend tests, unit tests, and Playwright coverage, plus Docker integration coverage where it touches persistence.
+
+1. Done in Part 12.
+2. Done in Part 13.
+3. Done in Part 14.
+4. Done in Part 15.
+
+Next candidates: card comments or checklists, archiving cards instead of deleting them, and exporting a board as JSON.

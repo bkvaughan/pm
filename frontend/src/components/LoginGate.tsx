@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { LogOutIcon } from "@/components/icons";
 
 const USERNAME = "user";
 const PASSWORD = "password";
@@ -32,16 +33,25 @@ export const LoginGate = ({ children }: LoginGateProps) => {
 
   if (isAuthenticated) {
     return (
-      <div>
-        <div className="mx-auto flex max-w-[2000px] justify-end px-6 pt-6">
+      <div className="flex min-h-screen flex-col xl:h-screen">
+        <nav className="flex shrink-0 items-center justify-between gap-4 border-b border-[var(--stroke)] bg-white px-4 py-2.5">
+          <div className="flex items-center gap-3">
+            <span className="grid h-8 w-8 place-items-center rounded-lg bg-[var(--navy-dark)]">
+              <span className="h-3 w-3 rounded-sm bg-[var(--accent-yellow)]" />
+            </span>
+            <h1 className="font-display text-lg font-semibold text-[var(--navy-dark)]">
+              Kanban Studio
+            </h1>
+          </div>
           <button
             type="button"
             onClick={handleLogout}
-            className="rounded-full border border-[var(--stroke)] bg-white px-4 py-2 text-sm font-semibold text-[var(--navy-dark)] transition hover:border-[var(--primary-blue)]"
+            className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-semibold text-[var(--gray-text)] transition hover:bg-[var(--surface)] hover:text-[var(--navy-dark)]"
           >
+            <LogOutIcon />
             Log out
           </button>
-        </div>
+        </nav>
         {children}
       </div>
     );

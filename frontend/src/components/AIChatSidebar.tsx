@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import type { BoardData } from "@/lib/kanban";
+import { SendIcon } from "@/components/icons";
 
 type ChatMessage = {
   id: string;
@@ -109,18 +110,18 @@ export const AIChatSidebar = ({
   return (
     <aside
       aria-label="AI project assistant"
-      className="flex min-h-[520px] flex-col overflow-hidden rounded-[28px] border border-[var(--stroke)] bg-white/90 shadow-[var(--shadow)] backdrop-blur 2xl:sticky 2xl:top-6 2xl:h-[calc(100vh-3rem)]"
+      className="flex h-[480px] min-h-0 flex-col overflow-hidden rounded-2xl border border-[var(--stroke)] bg-white shadow-[0_4px_12px_rgba(3,33,71,0.06)] xl:h-auto"
     >
-      <header className="border-b border-[var(--stroke)] px-5 py-5">
-        <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[var(--gray-text)]">
-          Project assistant
-        </p>
-        <h2 className="mt-2 font-display text-xl font-semibold text-[var(--navy-dark)]">
-          Ask about your board
-        </h2>
-        <p className="mt-2 text-sm leading-5 text-[var(--gray-text)]">
-          Ask a question or request a card or column update.
-        </p>
+      <header className="flex items-center gap-3 border-b border-[var(--stroke)] px-4 py-3">
+        <span className="h-2 w-2 shrink-0 rounded-full bg-[var(--secondary-purple)]" />
+        <div>
+          <h2 className="font-display text-sm font-semibold text-[var(--navy-dark)]">
+            Project assistant
+          </h2>
+          <p className="text-xs text-[var(--gray-text)]">
+            Ask a question or request a card or column update.
+          </p>
+        </div>
       </header>
 
       <div
@@ -128,12 +129,12 @@ export const AIChatSidebar = ({
         role="log"
         aria-label="Conversation"
         aria-live="polite"
-        className="flex flex-1 flex-col gap-3 overflow-y-auto px-4 py-4"
+        className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto p-3"
       >
         {messages.length === 0 ? (
-          <p className="rounded-2xl bg-[var(--surface)] p-4 text-sm leading-6 text-[var(--gray-text)]">
-            Try “Summarize the board” or “Move the analytics prototype to
-            Review.”
+          <p className="rounded-xl bg-[var(--surface)] p-3 text-xs leading-5 text-[var(--gray-text)]">
+            Try &ldquo;Summarize the board&rdquo; or &ldquo;Move the analytics
+            prototype to Review.&rdquo;
           </p>
         ) : (
           messages.map((message) => (
@@ -141,8 +142,8 @@ export const AIChatSidebar = ({
               key={message.id}
               className={
                 message.role === "user"
-                  ? "ml-6 self-end rounded-2xl bg-[var(--secondary-purple)] px-4 py-3 text-sm leading-6 text-white"
-                  : "mr-6 self-start rounded-2xl bg-[var(--surface)] px-4 py-3 text-sm leading-6 text-[var(--navy-dark)]"
+                  ? "ml-8 self-end whitespace-pre-wrap rounded-xl rounded-br-sm bg-[var(--secondary-purple)] px-3 py-2 text-sm leading-5 text-white"
+                  : "mr-8 self-start whitespace-pre-wrap rounded-xl rounded-bl-sm bg-[var(--surface)] px-3 py-2 text-sm leading-5 text-[var(--navy-dark)]"
               }
             >
               {message.content}
@@ -150,7 +151,7 @@ export const AIChatSidebar = ({
           ))
         )}
         {isSending && (
-          <p role="status" className="text-sm text-[var(--gray-text)]">
+          <p role="status" className="text-xs text-[var(--gray-text)]">
             Assistant is thinking... Replies can take up to a minute.
           </p>
         )}
@@ -158,32 +159,36 @@ export const AIChatSidebar = ({
 
       <form
         onSubmit={handleSubmit}
-        className="border-t border-[var(--stroke)] p-4"
+        className="border-t border-[var(--stroke)] p-3"
       >
         {error && (
-          <p role="alert" className="mb-3 text-sm font-semibold text-red-700">
+          <p role="alert" className="mb-2 text-sm font-semibold text-red-700">
             {error}
           </p>
         )}
         <label htmlFor="assistant-message" className="sr-only">
           Message the assistant
         </label>
-        <textarea
-          id="assistant-message"
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          placeholder="Ask a question or request a change..."
-          rows={3}
-          maxLength={4000}
-          className="w-full resize-none rounded-2xl border border-[var(--stroke)] bg-white px-4 py-3 text-sm leading-6 text-[var(--navy-dark)] outline-none transition focus:border-[var(--primary-blue)]"
-        />
-        <button
-          type="submit"
-          disabled={isSending || !draft.trim()}
-          className="mt-3 w-full rounded-full bg-[var(--secondary-purple)] px-5 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {isSending ? "Sending..." : "Send"}
-        </button>
+        <div className="flex items-end gap-2 rounded-xl border border-[var(--stroke)] bg-white p-1.5 transition focus-within:border-[var(--primary-blue)]">
+          <textarea
+            id="assistant-message"
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            placeholder="Ask a question or request a change..."
+            rows={2}
+            maxLength={4000}
+            className="min-w-0 flex-1 resize-none bg-transparent px-2 py-1 text-sm leading-5 text-[var(--navy-dark)] outline-none"
+          />
+          <button
+            type="submit"
+            disabled={isSending || !draft.trim()}
+            aria-label="Send"
+            title="Send"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-[var(--secondary-purple)] text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            <SendIcon />
+          </button>
+        </div>
       </form>
     </aside>
   );

@@ -279,7 +279,7 @@ export const KanbanBoard = () => {
 
   if (loadError) {
     return (
-      <main className="flex min-h-screen items-center justify-center px-6">
+      <main className="flex flex-1 items-center justify-center px-6 py-16">
         <div className="rounded-2xl border border-[var(--stroke)] bg-white p-8 shadow-[var(--shadow)]">
           <p role="alert" className="text-sm font-semibold text-red-700">
             {loadError}
@@ -298,7 +298,7 @@ export const KanbanBoard = () => {
 
   if (!board) {
     return (
-      <main className="flex min-h-screen items-center justify-center">
+      <main className="flex flex-1 items-center justify-center py-16">
         <p role="status" className="text-sm font-semibold text-[var(--gray-text)]">
           Loading board...
         </p>
@@ -306,129 +306,106 @@ export const KanbanBoard = () => {
     );
   }
 
+  const cardCount = Object.keys(board.cards).length;
+
   return (
-    <div className="relative overflow-hidden">
-      <div className="pointer-events-none absolute left-0 top-0 h-[420px] w-[420px] -translate-x-1/3 -translate-y-1/3 rounded-full bg-[radial-gradient(circle,_rgba(32,157,215,0.25)_0%,_rgba(32,157,215,0.05)_55%,_transparent_70%)]" />
-      <div className="pointer-events-none absolute bottom-0 right-0 h-[520px] w-[520px] translate-x-1/4 translate-y-1/4 rounded-full bg-[radial-gradient(circle,_rgba(117,57,145,0.18)_0%,_rgba(117,57,145,0.05)_55%,_transparent_75%)]" />
-
-      <div className="relative mx-auto grid min-h-screen max-w-[2000px] gap-6 px-6 pb-16 pt-8 2xl:grid-cols-[minmax(0,1fr)_360px]">
-        <main
-          inert={isAssistantBusy}
-          aria-busy={isAssistantBusy}
-          className={clsx(
-            "flex min-w-0 flex-col gap-10 transition-opacity",
-            isAssistantBusy && "opacity-60"
-          )}
-        >
-          <header className="flex flex-col gap-6 rounded-[32px] border border-[var(--stroke)] bg-white/80 p-8 shadow-[var(--shadow)] backdrop-blur">
-          <div className="flex flex-wrap items-start justify-between gap-6">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-[var(--gray-text)]">
-                Single Board Kanban
-              </p>
-              <h1 className="mt-3 font-display text-4xl font-semibold text-[var(--navy-dark)]">
-                Kanban Studio
-              </h1>
-              <p className="mt-3 max-w-xl text-sm leading-6 text-[var(--gray-text)]">
-                Keep momentum visible. Rename columns, drag cards between stages,
-                and capture quick notes without getting buried in settings.
-              </p>
-            </div>
-            <div className="rounded-2xl border border-[var(--stroke)] bg-[var(--surface)] px-5 py-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[var(--gray-text)]">
-                Focus
-              </p>
-              <p className="mt-2 text-lg font-semibold text-[var(--primary-blue)]">
-                One board. Five columns. Zero clutter.
-              </p>
-            </div>
-          </div>
-          {saveError && (
-            <div className="flex flex-wrap items-center gap-3">
-              <p role="alert" className="text-sm font-semibold text-red-700">
-                {saveError}
-              </p>
-              <button
-                type="button"
-                onClick={() => void loadBoard()}
-                className="rounded-full border border-[var(--stroke)] px-4 py-1 text-xs font-semibold text-[var(--navy-dark)] transition hover:border-[var(--primary-blue)]"
-              >
-                Reload board
-              </button>
-            </div>
-          )}
-          <p
-            data-testid="board-save-status"
-            className="text-sm text-[var(--gray-text)]"
-            aria-live="polite"
-          >
-            {isAssistantBusy
-              ? "Board is locked while the assistant works..."
-              : isSaving
-                ? "Saving changes..."
-                : "Saved"}
+    <div className="grid min-h-0 flex-1 gap-4 p-4 xl:grid-cols-[minmax(0,1fr)_300px] 2xl:grid-cols-[minmax(0,1fr)_360px]">
+      <main
+        inert={isAssistantBusy}
+        aria-busy={isAssistantBusy}
+        className={clsx(
+          "flex min-h-0 min-w-0 flex-col gap-3 transition-opacity",
+          isAssistantBusy && "opacity-60"
+        )}
+      >
+        <div className="flex flex-wrap items-center justify-between gap-3 px-1">
+          <p className="text-sm text-[var(--gray-text)]">
+            {board.columns.length} columns, {cardCount} cards
           </p>
-          <div className="flex flex-wrap items-center gap-4">
-            {board.columns.map((column) => (
-              <div
-                key={column.id}
-                className="flex items-center gap-2 rounded-full border border-[var(--stroke)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--navy-dark)]"
-              >
-                <span className="h-2 w-2 rounded-full bg-[var(--accent-yellow)]" />
-                {column.title}
-              </div>
-            ))}
-          </div>
-          </header>
-
-          <DndContext
-            sensors={sensors}
-            collisionDetection={detectCollision}
-            onDragStart={handleDragStart}
-            onDragOver={handleDragOver}
-            onDragEnd={handleDragEnd}
-            onDragCancel={handleDragCancel}
-          >
-            <div className="overflow-x-auto pb-4">
-              <section className="grid min-w-[1100px] grid-cols-5 gap-6">
-                {board.columns.map((column) => (
-                  <KanbanColumn
-                    key={column.id}
-                    column={column}
-                    cards={column.cardIds.map((cardId) => board.cards[cardId])}
-                    isDropTarget={dropTargetColumnId === column.id}
-                    onRename={handleRenameColumn}
-                    onAddCard={handleAddCard}
-                    onDeleteCard={handleDeleteCard}
-                    onEditCard={handleEditCard}
-                  />
-                ))}
-              </section>
-            </div>
-            <DragOverlay
-              dropAnimation={{
-                duration: 180,
-                easing: "cubic-bezier(0.2, 0, 0, 1)",
-              }}
-            >
-              {activeCard ? (
-                <div
-                  style={
-                    activeCardWidth ? { width: activeCardWidth } : undefined
-                  }
+          <div className="flex flex-wrap items-center gap-3">
+            {saveError && (
+              <>
+                <p role="alert" className="text-sm font-semibold text-red-700">
+                  {saveError}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => void loadBoard()}
+                  className="rounded-lg border border-[var(--stroke)] bg-white px-3 py-1 text-xs font-semibold text-[var(--navy-dark)] transition hover:border-[var(--primary-blue)]"
                 >
-                  <KanbanCardPreview card={activeCard} />
-                </div>
-              ) : null}
-            </DragOverlay>
-          </DndContext>
-        </main>
-        <AIChatSidebar
-          waitForSaves={() => saveQueue.current}
-          onBusyChange={setIsAssistantBusy}
-          onBoardUpdate={handleAssistantBoardUpdate}
-        />
-      </div>
+                  Reload board
+                </button>
+              </>
+            )}
+            <p
+              data-testid="board-save-status"
+              className="flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-semibold text-[var(--gray-text)] shadow-sm"
+              aria-live="polite"
+            >
+              <span
+                className={clsx(
+                  "h-1.5 w-1.5 rounded-full",
+                  isAssistantBusy || isSaving
+                    ? "bg-[var(--accent-yellow)]"
+                    : "bg-emerald-500"
+                )}
+              />
+              {isAssistantBusy
+                ? "Board is locked while the assistant works..."
+                : isSaving
+                  ? "Saving changes..."
+                  : "Saved"}
+            </p>
+          </div>
+        </div>
+
+        <DndContext
+          sensors={sensors}
+          collisionDetection={detectCollision}
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDragEnd={handleDragEnd}
+          onDragCancel={handleDragCancel}
+        >
+          <div className="-m-1 min-h-0 flex-1 overflow-auto p-1">
+            <section className="grid min-h-full min-w-[920px] grid-cols-5 gap-4">
+              {board.columns.map((column) => (
+                <KanbanColumn
+                  key={column.id}
+                  column={column}
+                  cards={column.cardIds.map((cardId) => board.cards[cardId])}
+                  isDropTarget={dropTargetColumnId === column.id}
+                  onRename={handleRenameColumn}
+                  onAddCard={handleAddCard}
+                  onDeleteCard={handleDeleteCard}
+                  onEditCard={handleEditCard}
+                />
+              ))}
+            </section>
+          </div>
+          <DragOverlay
+            dropAnimation={{
+              duration: 180,
+              easing: "cubic-bezier(0.2, 0, 0, 1)",
+            }}
+          >
+            {activeCard ? (
+              <div
+                style={
+                  activeCardWidth ? { width: activeCardWidth } : undefined
+                }
+              >
+                <KanbanCardPreview card={activeCard} />
+              </div>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
+      </main>
+      <AIChatSidebar
+        waitForSaves={() => saveQueue.current}
+        onBusyChange={setIsAssistantBusy}
+        onBoardUpdate={handleAssistantBoardUpdate}
+      />
     </div>
   );
 };

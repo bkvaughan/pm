@@ -24,6 +24,7 @@ This directory contains the Next.js frontend for the PM MVP. It is the current d
 - src/components/KanbanCard.tsx: card rendering, inline editing, and sortable behavior
 - src/components/NewCardForm.tsx: inline card-creation form
 - src/components/KanbanCardPreview.tsx: drag overlay preview card
+- src/components/icons.tsx: inline SVG icons (edit, delete, add, send, log out)
 - src/lib/kanban.ts: board data model, moveCard logic, and ID generator
 - src/test/setup.ts: Vitest setup for DOM matchers and shared test configuration
 - src/test/fixtures.ts: test board data mirroring the backend seed (`backend/app/initial_data.py`)
@@ -38,12 +39,12 @@ The current frontend is a single-page Kanban board demo:
 - Each column shows cards and allows the user to rename the column title.
 - Cards can be dragged between columns and reorder within a column, with the mouse or the keyboard (Space to pick up, arrow keys to move, Space to drop).
 - Users can add a card via a small form inside each column.
-- Users can edit a card's title and details inline, and remove a card from the current column.
+- Users can edit a card's title and details inline, and remove a card from the current column, using icon buttons that appear on card hover or focus (always visible on touch devices).
 - The board loads from `GET /api/board` and saves changes to `PUT /api/board`.
 - Edits are optimistic in the UI and queued in order. Load errors show a Retry button; save errors show a Reload board button that refetches the saved board.
 - The AI sidebar waits for pending board saves, then sends the user message and recent conversation to `POST /api/ai/assistant`; the backend reads the saved board itself.
 - The board is locked (`inert`) while the assistant works, and the sidebar notes that replies can take up to a minute. Returned board changes are already saved by the backend and are displayed without another save.
-- The sidebar moves below the board on smaller screens and sits beside it on wide screens.
+- On screens 1280px and wider the app fills the viewport: a slim top bar, the five columns sharing the board width (scrolling horizontally only if needed), and the assistant sidebar beside the board. On smaller screens the sidebar moves below the board.
 
 ## Core data model
 

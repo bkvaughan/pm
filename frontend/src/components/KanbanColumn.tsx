@@ -30,42 +30,41 @@ export const KanbanColumn = ({
     <section
       ref={setNodeRef}
       className={clsx(
-        "flex min-h-[520px] flex-col rounded-3xl border bg-[var(--surface-strong)] p-4 shadow-[var(--shadow)] transition",
+        "flex min-h-[420px] flex-col rounded-2xl border p-3 transition",
         isOver || isDropTarget
           ? "border-[var(--accent-yellow)] bg-amber-50 shadow-[0_0_0_3px_rgba(236,173,10,0.18)]"
-          : "border-[var(--stroke)]"
+          : "border-[var(--stroke)] bg-[rgba(3,33,71,0.03)]"
       )}
       data-testid={`column-${column.id}`}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="w-full">
-          <div className="flex items-center gap-3">
-            <div className="h-2 w-10 rounded-full bg-[var(--accent-yellow)]" />
-            <span className="text-xs font-semibold uppercase tracking-[0.2em] text-[var(--gray-text)]">
-              {cards.length} cards
-            </span>
-          </div>
-          <input
-            key={column.title}
-            defaultValue={column.title}
-            onBlur={(event) => {
-              const title = event.target.value.trim();
-              event.target.value = title || column.title;
-              if (title && title !== column.title) {
-                onRename(column.id, title);
-              }
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.currentTarget.blur();
-              }
-            }}
-            className="mt-3 w-full bg-transparent font-display text-lg font-semibold text-[var(--navy-dark)] outline-none"
-            aria-label="Column title"
-          />
-        </div>
+      <div className="flex items-center gap-2 px-1">
+        <span className="h-2 w-2 shrink-0 rounded-full bg-[var(--accent-yellow)]" />
+        <input
+          key={column.title}
+          defaultValue={column.title}
+          onBlur={(event) => {
+            const title = event.target.value.trim();
+            event.target.value = title || column.title;
+            if (title && title !== column.title) {
+              onRename(column.id, title);
+            }
+          }}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              event.currentTarget.blur();
+            }
+          }}
+          className="min-w-0 flex-1 rounded-md bg-transparent px-1 py-0.5 font-display text-sm font-semibold text-[var(--navy-dark)] outline-none transition hover:bg-white/70 focus:bg-white focus:ring-2 focus:ring-[rgba(32,157,215,0.4)]"
+          aria-label="Column title"
+        />
+        <span
+          className="shrink-0 rounded-full bg-white px-2 py-0.5 text-xs font-semibold text-[var(--gray-text)] shadow-sm"
+          aria-label={`${cards.length} cards`}
+        >
+          {cards.length}
+        </span>
       </div>
-      <div className="mt-4 flex flex-1 flex-col gap-3">
+      <div className="mt-3 flex flex-col gap-2">
         <SortableContext items={column.cardIds} strategy={verticalListSortingStrategy}>
           {cards.map((card) => (
             <KanbanCard
@@ -77,7 +76,7 @@ export const KanbanColumn = ({
           ))}
         </SortableContext>
         {cards.length === 0 && (
-          <div className="flex flex-1 items-start justify-center rounded-2xl border border-dashed border-[var(--stroke)] px-3 pt-6 text-center text-xs font-semibold uppercase tracking-[0.2em] text-[var(--gray-text)]">
+          <div className="rounded-xl border border-dashed border-[rgba(3,33,71,0.15)] px-3 py-8 text-center text-xs font-semibold text-[var(--gray-text)]">
             Drop a card here
           </div>
         )}

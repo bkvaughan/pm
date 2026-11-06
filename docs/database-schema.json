@@ -1,5 +1,5 @@
 {
-  "schema_version": 4,
+  "schema_version": 6,
   "database": "SQLite",
   "tables": [
     {
@@ -178,6 +178,20 @@
           "not_null": true,
           "default": "[]",
           "format": "JSON array of strings"
+        },
+        {
+          "name": "checklist",
+          "type": "TEXT",
+          "not_null": true,
+          "default": "[]",
+          "format": "JSON array of {id, text, done} objects"
+        },
+        {
+          "name": "archived",
+          "type": "INTEGER",
+          "not_null": true,
+          "default": "0",
+          "format": "0 or 1"
         },
         {
           "name": "position",

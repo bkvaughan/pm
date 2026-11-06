@@ -372,3 +372,15 @@ test("moves a card between columns with the keyboard", async ({ page }) => {
   await page.keyboard.press("Space");
   await expect(targetColumn.getByTestId("card-card-3")).toBeVisible();
 });
+
+test("card buttons work from the keyboard without starting a drag", async ({ page }) => {
+  await mockApi(page);
+  await page.goto("/");
+  await openBoard(page);
+
+  const card = page.getByTestId("card-card-1");
+  await card.getByRole("button", { name: "Edit Align roadmap themes" }).focus();
+  await page.keyboard.press("Enter");
+
+  await expect(card.getByLabel("Card title")).toHaveValue("Align roadmap themes");
+});

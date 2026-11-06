@@ -22,6 +22,8 @@ export const initialData: BoardData = {
       priority: "high",
       dueDate: null,
       labels: ["Planning"],
+      checklist: [],
+      archived: false,
     },
     "card-2": {
       id: "card-2",
@@ -30,6 +32,8 @@ export const initialData: BoardData = {
       priority: "medium",
       dueDate: null,
       labels: ["Research"],
+      checklist: [],
+      archived: false,
     },
     "card-3": {
       id: "card-3",
@@ -38,6 +42,8 @@ export const initialData: BoardData = {
       priority: "medium",
       dueDate: null,
       labels: ["Design", "Analytics"],
+      checklist: [],
+      archived: false,
     },
     "card-4": {
       id: "card-4",
@@ -46,6 +52,8 @@ export const initialData: BoardData = {
       priority: "low",
       dueDate: null,
       labels: [],
+      checklist: [],
+      archived: false,
     },
     "card-5": {
       id: "card-5",
@@ -54,6 +62,11 @@ export const initialData: BoardData = {
       priority: "high",
       dueDate: null,
       labels: ["Design"],
+      checklist: [
+        { id: "item-1", text: "Pick a type scale", done: true },
+        { id: "item-2", text: "Set spacing tokens", done: false },
+      ],
+      archived: false,
     },
     "card-6": {
       id: "card-6",
@@ -62,6 +75,8 @@ export const initialData: BoardData = {
       priority: "medium",
       dueDate: null,
       labels: ["QA"],
+      checklist: [],
+      archived: false,
     },
     "card-7": {
       id: "card-7",
@@ -70,6 +85,8 @@ export const initialData: BoardData = {
       priority: null,
       dueDate: null,
       labels: ["Marketing"],
+      checklist: [],
+      archived: false,
     },
     "card-8": {
       id: "card-8",
@@ -78,6 +95,8 @@ export const initialData: BoardData = {
       priority: null,
       dueDate: null,
       labels: [],
+      checklist: [],
+      archived: false,
     },
   },
 };

@@ -15,7 +15,7 @@ from app.security import hash_password
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 DB_PATH = Path(os.environ.get("PM_DATABASE_PATH", PROJECT_ROOT / "data" / "pm.sqlite3"))
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 6
 ACTIVITY_RETENTION = 200
 SESSION_LIFETIME = timedelta(days=30)
 DEMO_USERNAME = "user"
@@ -62,6 +62,8 @@ CREATE TABLE cards (
     priority TEXT,
     due_date TEXT,
     labels TEXT NOT NULL DEFAULT '[]',
+    checklist TEXT NOT NULL DEFAULT '[]',
+    archived INTEGER NOT NULL DEFAULT 0,
     position INTEGER NOT NULL,
     PRIMARY KEY (board_id, id),
     FOREIGN KEY (board_id, column_id)
@@ -96,6 +98,8 @@ MIGRATIONS = {
     );
     CREATE INDEX activity_board_id ON activity(board_id, id);
     """,
+    5: "ALTER TABLE cards ADD COLUMN checklist TEXT NOT NULL DEFAULT '[]';",
+    6: "ALTER TABLE cards ADD COLUMN archived INTEGER NOT NULL DEFAULT 0;",
 }
 
 
@@ -333,9 +337,9 @@ def _insert_board_contents(
                 """
                 INSERT INTO cards (
                     board_id, id, column_id, title, details,
-                    priority, due_date, labels, position
+                    priority, due_date, labels, checklist, archived, position
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     board_id,
@@ -346,6 +350,8 @@ def _insert_board_contents(
                     card["priority"],
                     card["dueDate"],
                     json.dumps(card["labels"]),
+                    json.dumps(card["checklist"]),
+                    card["archived"],
                     card_position,
                 ),
             )
@@ -362,7 +368,7 @@ def _read_legacy_board(connection: sqlite3.Connection) -> dict[str, Any]:
     cards = connection.execute(
         """
         SELECT id, column_id, title, details, NULL AS priority, NULL AS due_date,
-            '[]' AS labels
+            '[]' AS labels, '[]' AS checklist, 0 AS archived
         FROM cards WHERE board_id = ? ORDER BY column_id, position
         """,
         (LEGACY_BOARD_ID,),
@@ -380,8 +386,9 @@ def _read_board(connection: sqlite3.Connection, board_id: str) -> dict[str, Any]
     ).fetchall()
     cards = connection.execute(
         """
-        SELECT id, column_id, title, details, priority, due_date, labels FROM cards
-        WHERE board_id = ? ORDER BY column_id, position
+        SELECT id, column_id, title, details, priority, due_date, labels, checklist,
+            archived
+        FROM cards WHERE board_id = ? ORDER BY column_id, position
         """,
         (board_id,),
     ).fetchall()
@@ -413,6 +420,8 @@ def _board_dict(
                 "priority": card["priority"],
                 "dueDate": card["due_date"],
                 "labels": json.loads(card["labels"]),
+                "checklist": json.loads(card["checklist"]),
+                "archived": bool(card["archived"]),
             }
             for card in cards
         },
@@ -421,7 +430,10 @@ def _board_dict(
 
 BOARD_SUMMARY_QUERY = """
 SELECT boards.id, boards.name, boards.created_at, boards.updated_at,
-    (SELECT COUNT(*) FROM cards WHERE cards.board_id = boards.id) AS card_count
+    (
+        SELECT COUNT(*) FROM cards
+        WHERE cards.board_id = boards.id AND NOT cards.archived
+    ) AS card_count
 FROM boards
 """
 

@@ -39,7 +39,7 @@ This directory contains the FastAPI backend. It serves the static frontend, auth
 Every route except /, /health, register, login, and logout requires the `pm_session` cookie (401 otherwise). Board routes return 404 for boards the user does not own. Usernames are 3-32 characters (letters, numbers, `.`, `_`, `-`) stored lowercase; passwords need at least 8 characters.
 
 The AI route requires `OPENROUTER_API_KEY` in the backend environment and times out after 30 seconds.
-Cards carry `priority` (low/medium/high or null), `dueDate` (ISO date or null), and `labels` (up to 10 unique strings of at most 30 characters). Columns carry an advisory `wipLimit` (1-99 or null). The board assistant accepts explicit card creation, editing (any card field; null clears priority or due date), and movement, plus column renaming and WIP limits. The prompt includes today's date so relative due dates work. Invalid model output or references are rejected without saving changes.
+Cards carry `priority` (low/medium/high or null), `dueDate` (ISO date or null), `labels` (up to 10 unique strings of at most 30 characters), `checklist` (up to 50 `{id, text, done}` items with unique IDs and 1-200 character text), and `archived` (boolean; archived cards keep their column position and are excluded from the board list's `cardCount`). Columns carry an advisory `wipLimit` (1-99 or null). The board assistant accepts explicit card creation, editing (any card field; null clears priority or due date), and movement, checklist items on new cards, checking items off (`check_item`), archiving and restoring (`edit_card` with `archived`), plus column renaming and WIP limits. The prompt includes today's date so relative due dates work. Invalid model output or references are rejected without saving changes.
 
 ## Development commands
 
@@ -60,7 +60,7 @@ Tests live in `tests/`, with shared fixtures in `conftest.py` (`client`, `demo_c
 
 - test_auth.py: registration, login, logout, protected routes, session expiry and pruning, password change, account deletion
 - test_boards.py: board CRUD, board data validation and persistence, card field defaults and validation, column changes, ID reuse across boards, cross-user isolation
-- test_assistant.py: mocked OpenRouter success and error paths, structured output validation, per-board mutations, card field create/edit/clear
+- test_assistant.py: mocked OpenRouter success and error paths, structured output validation, per-board mutations, card field create/edit/clear, checklist creation and `check_item`
 - test_activity.py: change descriptions, activity recording, limits, retention, and access control
 - test_database.py: new database seeding, idempotent startup, migration from the single-board schema and from each later version (`schema_at` rebuilds old schemas), password hashing
 

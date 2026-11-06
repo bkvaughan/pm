@@ -59,6 +59,8 @@ test("a new user registers, manages boards, and deletes their account", async ({
     await card.getByLabel("Priority").selectOption("high");
     await card.getByLabel("Due date").fill("2030-06-01");
     await card.getByLabel("Labels").fill("Docker, docker, E2E");
+    await card.getByLabel("New checklist item").fill("Docker step");
+    await card.getByLabel("New checklist item").press("Enter");
     const savedDetails = page.waitForResponse(
       (response) =>
         /\/api\/boards\/[^/]+$/.test(response.url()) &&
@@ -68,9 +70,21 @@ test("a new user registers, manages boards, and deletes their account", async ({
     expect((await savedDetails).ok()).toBe(true);
     await page.reload();
     await expect(card.getByText("High priority")).toBeVisible();
-    await expect(card.getByText("Docker")).toBeVisible();
+    await expect(card.getByText("Docker", { exact: true })).toBeVisible();
     await expect(card.getByText("E2E")).toBeVisible();
     await expect(card.locator("[data-due-status]")).toHaveAttribute("title", "2030-06-01");
+
+    // Checking off an item from the card is saved too.
+    const savedCheck = page.waitForResponse(
+      (response) =>
+        /\/api\/boards\/[^/]+$/.test(response.url()) &&
+        response.request().method() === "PUT",
+    );
+    await card.getByLabel("Docker step").check();
+    expect((await savedCheck).ok()).toBe(true);
+    await page.reload();
+    await expect(card.getByLabel("Docker step")).toBeChecked();
+    await expect(card.getByTestId("checklist-progress")).toHaveText("Checklist 1/1");
 
     // Column order and WIP limits are stored by the backend.
     // Resolve the column by ID: a positional locator would follow the move.
@@ -104,7 +118,8 @@ test("a new user registers, manages boards, and deletes their account", async ({
     for (const message of [
       'Set the WIP limit of "To Do" to 1',
       "Reordered columns",
-      'Edited card "Persisted card" (priority, due date, labels)',
+      'Checked off "Docker step" on "Persisted card"',
+      'Edited card "Persisted card" (priority, due date, labels, checklist)',
       'Created card "Persisted card" in "To Do"',
       'Created board "My First Board"',
     ]) {
@@ -133,6 +148,37 @@ test("a new user registers, manages boards, and deletes their account", async ({
     await expect(page.getByText("1 card -")).toBeVisible();
     await expect(
       page.getByRole("button", { name: "Second board", exact: true }),
+    ).toBeVisible();
+
+    // An archived card is kept but no longer shown or counted.
+    await page
+      .getByRole("button", { name: "My First Board", exact: true })
+      .click();
+    const savedArchive = page.waitForResponse(
+      (response) =>
+        /\/api\/boards\/[^/]+$/.test(response.url()) &&
+        response.request().method() === "PUT",
+    );
+    await card.hover();
+    await card
+      .getByRole("button", { name: "Archive Persisted card", exact: true })
+      .click();
+    expect((await savedArchive).ok()).toBe(true);
+    await page.reload();
+    await expect(page.getByText("Persisted card")).toHaveCount(0);
+    await page.getByRole("tab", { name: "Archived (1)" }).click();
+    await expect(
+      page.getByRole("list", { name: "Archived cards" }).getByText("Persisted card"),
+    ).toBeVisible();
+    await page.getByRole("tab", { name: "Activity" }).click();
+    await expect(
+      page.getByText('Archived card "Persisted card"', { exact: true }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Boards", exact: true }).click();
+    await expect(
+      page
+        .locator('[data-testid^="board-tile-"]', { hasText: "My First Board" })
+        .getByText(/^0 cards -/),
     ).toBeVisible();
 
     await page.getByRole("button", { name: "Account settings" }).click();

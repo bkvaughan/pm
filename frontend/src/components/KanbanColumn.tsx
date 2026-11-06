@@ -15,7 +15,8 @@ import { MoreIcon, TrashIcon } from "@/components/icons";
 
 type KanbanColumnProps = {
   column: Column;
-  cards: Card[];
+  cards: Card[]; // the visible cards
+  activeCount: number; // unarchived cards, visible or filtered out
   isDropTarget: boolean;
   canDelete: boolean;
   isFirst: boolean;
@@ -25,13 +26,14 @@ type KanbanColumnProps = {
   onMove: (columnId: string, offset: -1 | 1) => void;
   onSetWipLimit: (columnId: string, wipLimit: number | null) => void;
   onAddCard: (columnId: string, title: string, details: string) => void;
-  onDeleteCard: (columnId: string, cardId: string) => void;
-  onEditCard: (cardId: string, fields: CardFields) => void;
+  onArchiveCard: (cardId: string) => void;
+  onEditCard: (cardId: string, fields: Partial<CardFields>) => void;
 };
 
 export const KanbanColumn = ({
   column,
   cards,
+  activeCount,
   isDropTarget,
   canDelete,
   isFirst,
@@ -41,13 +43,13 @@ export const KanbanColumn = ({
   onMove,
   onSetWipLimit,
   onAddCard,
-  onDeleteCard,
+  onArchiveCard,
   onEditCard,
 }: KanbanColumnProps) => {
   const { setNodeRef, isOver } = useDroppable({ id: column.id });
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   const [showOptions, setShowOptions] = useState(false);
-  const total = column.cardIds.length;
+  const total = activeCount;
   const isFiltered = cards.length !== total;
   const isOverLimit = column.wipLimit !== null && total > column.wipLimit;
   const countText = isFiltered
@@ -85,8 +87,7 @@ export const KanbanColumn = ({
       )}
       data-testid={`column-${column.id}`}
     >
-      <div className="flex items-center gap-2 px-1">
-        <span className="h-2 w-2 shrink-0 rounded-full bg-[var(--accent-yellow)]" />
+      <div className="flex items-center gap-1">
         <input
           key={column.title}
           defaultValue={column.title}
@@ -104,6 +105,7 @@ export const KanbanColumn = ({
           }}
           className="min-w-0 flex-1 rounded-md bg-transparent px-1 py-0.5 font-display text-sm font-semibold text-[var(--navy-dark)] outline-none transition hover:bg-white/70 focus:bg-white focus:ring-2 focus:ring-[rgba(32,157,215,0.4)]"
           aria-label="Column title"
+          title={column.title}
         />
         <span
           className={clsx(
@@ -126,17 +128,6 @@ export const KanbanColumn = ({
         >
           <MoreIcon width={13} height={13} />
         </button>
-        {canDelete && (
-          <button
-            type="button"
-            onClick={() => setIsConfirmingDelete(true)}
-            aria-label={`Delete column ${column.title}`}
-            title="Delete column"
-            className="shrink-0 rounded-md p-1 text-[var(--gray-text)] transition hover:bg-red-50 hover:text-red-600"
-          >
-            <TrashIcon width={13} height={13} />
-          </button>
-        )}
       </div>
       {showOptions && (
         <div
@@ -179,6 +170,17 @@ export const KanbanColumn = ({
               className="w-20 rounded-md border border-[var(--stroke)] px-2 py-1 font-normal outline-none focus:border-[var(--primary-blue)]"
             />
           </label>
+          {canDelete && (
+            <button
+              type="button"
+              onClick={() => setIsConfirmingDelete(true)}
+              aria-label={`Delete column ${column.title}`}
+              className="flex w-full items-center justify-center gap-1.5 rounded-md px-2 py-1 font-semibold text-red-700 transition hover:bg-red-50"
+            >
+              <TrashIcon width={13} height={13} />
+              Delete column
+            </button>
+          )}
         </div>
       )}
       {isConfirmingDelete && (
@@ -213,14 +215,14 @@ export const KanbanColumn = ({
             <KanbanCard
               key={card.id}
               card={card}
-              onDelete={(cardId) => onDeleteCard(column.id, cardId)}
+              onArchive={onArchiveCard}
               onEdit={onEditCard}
             />
           ))}
         </SortableContext>
         {cards.length === 0 && (
           <div className="rounded-xl border border-dashed border-[rgba(3,33,71,0.15)] px-3 py-8 text-center text-xs font-semibold text-[var(--gray-text)]">
-            {column.cardIds.length ? "No matching cards" : "Drop a card here"}
+            {total ? "No matching cards" : "Drop a card here"}
           </div>
         )}
       </div>

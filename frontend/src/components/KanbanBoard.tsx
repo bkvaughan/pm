@@ -21,6 +21,7 @@ import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
 import { AIChatSidebar } from "@/components/AIChatSidebar";
+import { ArchivedCardsPanel } from "@/components/ArchivedCardsPanel";
 import { BoardSidebar } from "@/components/BoardSidebar";
 import { AddColumnForm } from "@/components/AddColumnForm";
 import { BoardFilters } from "@/components/BoardFilters";
@@ -305,6 +306,8 @@ export const KanbanBoard = ({ boardId }: KanbanBoardProps) => {
           priority: null,
           dueDate: null,
           labels: [],
+          checklist: [],
+          archived: false,
         },
       },
       columns: current.columns.map((column) =>
@@ -315,7 +318,7 @@ export const KanbanBoard = ({ boardId }: KanbanBoardProps) => {
     }));
   };
 
-  const handleEditCard = (cardId: string, fields: CardFields) => {
+  const handleEditCard = (cardId: string, fields: Partial<CardFields>) => {
     updateBoard((current) => ({
       ...current,
       cards: {
@@ -325,22 +328,21 @@ export const KanbanBoard = ({ boardId }: KanbanBoardProps) => {
     }));
   };
 
-  const handleDeleteCard = (columnId: string, cardId: string) => {
+  const handleDeleteCard = (cardId: string) => {
     updateBoard((current) => ({
       ...current,
       cards: Object.fromEntries(
         Object.entries(current.cards).filter(([id]) => id !== cardId),
       ),
-      columns: current.columns.map((column) =>
-        column.id === columnId
-          ? {
-              ...column,
-              cardIds: column.cardIds.filter((id) => id !== cardId),
-            }
-          : column,
-      ),
+      columns: current.columns.map((column) => ({
+        ...column,
+        cardIds: column.cardIds.filter((id) => id !== cardId),
+      })),
     }));
   };
+
+  const handleSetArchived = (cardId: string, archived: boolean) =>
+    handleEditCard(cardId, { archived });
 
   // The backend has already saved the assistant's changes.
   const handleAssistantBoardUpdate = (nextBoard: BoardData) => {
@@ -386,12 +388,18 @@ export const KanbanBoard = ({ boardId }: KanbanBoardProps) => {
     );
   }
 
-  const cardCount = Object.keys(board.cards).length;
+  const activeCards = Object.values(board.cards).filter((card) => !card.archived);
+  const cardCount = activeCards.length;
   const today = toIsoDate(new Date());
   const visibleCardIds = new Set(
-    Object.values(board.cards)
+    activeCards
       .filter((card) => matchesFilter(card, filter, today))
       .map((card) => card.id),
+  );
+  const archivedCards = board.columns.flatMap((column) =>
+    column.cardIds
+      .filter((cardId) => board.cards[cardId].archived)
+      .map((cardId) => ({ card: board.cards[cardId], columnTitle: column.title })),
   );
 
   return (
@@ -472,6 +480,10 @@ export const KanbanBoard = ({ boardId }: KanbanBoardProps) => {
                   cards={column.cardIds
                     .filter((cardId) => visibleCardIds.has(cardId))
                     .map((cardId) => board.cards[cardId])}
+                  activeCount={
+                    column.cardIds.filter((cardId) => !board.cards[cardId].archived)
+                      .length
+                  }
                   isDropTarget={dropTargetColumnId === column.id}
                   canDelete={board.columns.length > 1}
                   isFirst={index === 0}
@@ -481,7 +493,7 @@ export const KanbanBoard = ({ boardId }: KanbanBoardProps) => {
                   onRename={handleRenameColumn}
                   onDelete={handleDeleteColumn}
                   onAddCard={handleAddCard}
-                  onDeleteCard={handleDeleteCard}
+                  onArchiveCard={(cardId) => handleSetArchived(cardId, true)}
                   onEditCard={handleEditCard}
                 />
               ))}
@@ -506,6 +518,14 @@ export const KanbanBoard = ({ boardId }: KanbanBoardProps) => {
       <BoardSidebar
         boardId={boardId}
         activityVersion={activityVersion}
+        archived={
+          <ArchivedCardsPanel
+            entries={archivedCards}
+            onRestore={(cardId) => handleSetArchived(cardId, false)}
+            onDelete={handleDeleteCard}
+          />
+        }
+        archivedCount={archivedCards.length}
         assistant={
           <AIChatSidebar
             boardId={boardId}

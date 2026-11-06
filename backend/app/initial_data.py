@@ -39,6 +39,8 @@ INITIAL_BOARD = {
             "priority": "high",
             "dueDate": None,
             "labels": ["Planning"],
+            "checklist": [],
+            "archived": False,
         },
         "card-2": {
             "id": "card-2",
@@ -47,6 +49,8 @@ INITIAL_BOARD = {
             "priority": "medium",
             "dueDate": None,
             "labels": ["Research"],
+            "checklist": [],
+            "archived": False,
         },
         "card-3": {
             "id": "card-3",
@@ -55,6 +59,8 @@ INITIAL_BOARD = {
             "priority": "medium",
             "dueDate": None,
             "labels": ["Design", "Analytics"],
+            "checklist": [],
+            "archived": False,
         },
         "card-4": {
             "id": "card-4",
@@ -63,6 +69,8 @@ INITIAL_BOARD = {
             "priority": "low",
             "dueDate": None,
             "labels": [],
+            "checklist": [],
+            "archived": False,
         },
         "card-5": {
             "id": "card-5",
@@ -71,6 +79,11 @@ INITIAL_BOARD = {
             "priority": "high",
             "dueDate": None,
             "labels": ["Design"],
+            "checklist": [
+                {"id": "item-1", "text": "Pick a type scale", "done": True},
+                {"id": "item-2", "text": "Set spacing tokens", "done": False},
+            ],
+            "archived": False,
         },
         "card-6": {
             "id": "card-6",
@@ -79,6 +92,8 @@ INITIAL_BOARD = {
             "priority": "medium",
             "dueDate": None,
             "labels": ["QA"],
+            "checklist": [],
+            "archived": False,
         },
         "card-7": {
             "id": "card-7",
@@ -87,6 +102,8 @@ INITIAL_BOARD = {
             "priority": None,
             "dueDate": None,
             "labels": ["Marketing"],
+            "checklist": [],
+            "archived": False,
         },
         "card-8": {
             "id": "card-8",
@@ -95,6 +112,8 @@ INITIAL_BOARD = {
             "priority": None,
             "dueDate": None,
             "labels": [],
+            "checklist": [],
+            "archived": False,
         },
     },
 }

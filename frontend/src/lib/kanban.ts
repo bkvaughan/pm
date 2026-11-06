@@ -2,6 +2,12 @@ export type Priority = "low" | "medium" | "high";
 
 export const PRIORITIES: Priority[] = ["high", "medium", "low"];
 
+export type ChecklistItem = {
+  id: string;
+  text: string;
+  done: boolean;
+};
+
 export type Card = {
   id: string;
   title: string;
@@ -9,9 +15,17 @@ export type Card = {
   priority: Priority | null;
   dueDate: string | null; // YYYY-MM-DD
   labels: string[];
+  checklist: ChecklistItem[];
+  archived: boolean; // hidden from the board, kept in its column's cardIds
 };
 
 export type CardFields = Omit<Card, "id">;
+
+export const MAX_CHECKLIST_ITEMS = 50;
+export const MAX_CHECKLIST_TEXT_LENGTH = 200;
+
+export const toggleChecklistItem = (items: ChecklistItem[], itemId: string) =>
+  items.map((item) => (item.id === itemId ? { ...item, done: !item.done } : item));
 
 export const MAX_LABELS = 10;
 export const MAX_LABEL_LENGTH = 30;

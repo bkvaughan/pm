@@ -77,7 +77,7 @@ describe("KanbanBoard", () => {
     expect(countSaves()).toBe(0);
   });
 
-  it("persists added and removed cards", async () => {
+  it("persists added, archived, restored, and deleted cards", async () => {
     render(<KanbanBoard boardId="board-1" />);
     await screen.findAllByLabelText("Column title");
     const column = getFirstColumn();
@@ -94,30 +94,60 @@ describe("KanbanBoard", () => {
     await userEvent.click(within(column).getByRole("button", { name: /add card/i }));
 
     expect(within(column).getByText("New card")).toBeInTheDocument();
-    await vi.waitFor(() => {
-      expect(
-        Object.values(persistedBoard.cards).some(
-          (card) => card.title === "New card"
-        )
-      ).toBe(true);
+    const newCard = () =>
+      Object.values(persistedBoard.cards).find((card) => card.title === "New card");
+    await vi.waitFor(() => expect(newCard()).toBeDefined());
+    expect(newCard()).toMatchObject({
+      details: "Notes",
+      priority: null,
+      dueDate: null,
+      labels: [],
+      checklist: [],
+      archived: false,
     });
-    expect(
-      Object.values(persistedBoard.cards).find((card) => card.title === "New card")
-    ).toMatchObject({ details: "Notes", priority: null, dueDate: null, labels: [] });
 
-    const deleteButton = within(column).getByRole("button", {
-      name: /delete new card/i,
-    });
-    await userEvent.click(deleteButton);
-
+    // Archiving hides the card but keeps it, in place, in its column.
+    await userEvent.click(within(column).getByRole("button", { name: "Archive New card" }));
     expect(within(column).queryByText("New card")).not.toBeInTheDocument();
-    await vi.waitFor(() => {
-      expect(
-        Object.values(persistedBoard.cards).some(
-          (card) => card.title === "New card"
-        )
-      ).toBe(false);
-    });
+    expect(within(column).getByTestId("count-badge")).toHaveTextContent("2");
+    await vi.waitFor(() => expect(newCard()?.archived).toBe(true));
+    expect(persistedBoard.columns[0].cardIds).toContain(newCard()!.id);
+
+    await userEvent.click(screen.getByRole("tab", { name: "Archived (1)" }));
+    const archived = screen.getByRole("list", { name: "Archived cards" });
+    expect(within(archived).getByText("From Backlog")).toBeInTheDocument();
+    await userEvent.click(within(archived).getByRole("button", { name: "Restore New card" }));
+    expect(within(column).getByText("New card")).toBeInTheDocument();
+    expect(screen.getByText(/No archived cards/)).toBeInTheDocument();
+    await vi.waitFor(() => expect(newCard()?.archived).toBe(false));
+
+    await userEvent.click(within(column).getByRole("button", { name: "Archive New card" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Delete New card permanently" })
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.getByText("New card")).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Delete New card permanently" })
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Delete" }));
+
+    expect(screen.queryByText("New card")).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "Archived" })).toBeInTheDocument();
+    await vi.waitFor(() => expect(newCard()).toBeUndefined());
+    expect(persistedBoard.columns[0].cardIds).toEqual(["card-1", "card-2"]);
+  });
+
+  it("leaves archived cards out of counts and filters", async () => {
+    persistedBoard.cards["card-1"].archived = true;
+    render(<KanbanBoard boardId="board-1" />);
+    await screen.findAllByLabelText("Column title");
+
+    expect(screen.getByText("5 columns, 7 cards")).toBeInTheDocument();
+    expect(within(getFirstColumn()).getByTestId("count-badge")).toHaveTextContent("1");
+    expect(screen.queryByText("Align roadmap themes")).not.toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByLabelText("Filter by priority"), "high");
+    expect(screen.getByTestId("filter-summary")).toHaveTextContent("Showing 1 of 7 cards");
   });
 
   it("shows a visible error when a board update cannot be saved", async () => {
@@ -175,6 +205,8 @@ describe("KanbanBoard", () => {
         priority: "low",
         dueDate: "2030-01-15",
         labels: ["Roadmap", "Q1"],
+        checklist: [],
+        archived: false,
       });
     });
   });
@@ -325,6 +357,9 @@ describe("KanbanBoard", () => {
     await screen.findAllByLabelText("Column title");
     const column = screen.getByTestId("column-col-backlog");
     await userEvent.click(
+      within(column).getByRole("button", { name: "Column options for Backlog" })
+    );
+    await userEvent.click(
       within(column).getByRole("button", { name: "Delete column Backlog" })
     );
     expect(within(column).getByText("Delete this column and its 2 cards?")).toBeInTheDocument();
@@ -346,7 +381,9 @@ describe("KanbanBoard", () => {
     persistedBoard = singleColumn;
     render(<KanbanBoard boardId="board-1" />);
     await screen.findAllByLabelText("Column title");
+    await userEvent.click(screen.getByRole("button", { name: "Column options for Only" }));
 
+    expect(screen.getByTestId("options-panel")).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Delete column Only" })
     ).not.toBeInTheDocument();
@@ -439,12 +476,103 @@ describe("KanbanBoard", () => {
 
       const backlog = screen.getByTestId("column-col-backlog");
       await userEvent.click(
+        within(backlog).getByRole("button", { name: "Column options for Backlog" })
+      );
+      await userEvent.click(
         within(backlog).getByRole("button", { name: "Delete column Backlog" })
       );
 
       expect(
         within(backlog).getByText("Delete this column and its 2 cards?")
       ).toBeInTheDocument();
+    });
+  });
+
+  describe("checklists", () => {
+    it("shows progress and toggles an item from the card", async () => {
+      render(<KanbanBoard boardId="board-1" />);
+      await screen.findAllByLabelText("Column title");
+      const card = screen.getByTestId("card-card-5");
+      expect(within(card).getByTestId("checklist-progress")).toHaveTextContent(
+        "Checklist 1/2"
+      );
+
+      await userEvent.click(within(card).getByLabelText("Set spacing tokens"));
+
+      expect(within(card).getByTestId("checklist-progress")).toHaveTextContent(
+        "Checklist 2/2"
+      );
+      await vi.waitFor(() => {
+        expect(persistedBoard.cards["card-5"].checklist).toEqual([
+          { id: "item-1", text: "Pick a type scale", done: true },
+          { id: "item-2", text: "Set spacing tokens", done: true },
+        ]);
+      });
+      expect(persistedBoard.cards["card-5"].title).toBe("Design card layout");
+    });
+
+    it("hides the checklist when a card has none", async () => {
+      render(<KanbanBoard boardId="board-1" />);
+      await screen.findAllByLabelText("Column title");
+
+      expect(
+        within(screen.getByTestId("card-card-1")).queryByTestId("checklist-progress")
+      ).not.toBeInTheDocument();
+    });
+
+    it("adds, renames, and removes items in the card editor", async () => {
+      render(<KanbanBoard boardId="board-1" />);
+      await screen.findAllByLabelText("Column title");
+      const card = screen.getByTestId("card-card-5");
+      await userEvent.click(
+        within(card).getByRole("button", { name: "Edit Design card layout" })
+      );
+
+      // Enter adds the item rather than saving the card.
+      await userEvent.type(within(card).getByLabelText("New checklist item"), "Ship it{Enter}");
+      expect(within(card).getByLabelText("Checklist item 3")).toHaveValue("Ship it");
+      expect(within(card).getByLabelText("New checklist item")).toHaveValue("");
+      await userEvent.type(within(card).getByLabelText("New checklist item"), "   ");
+      await userEvent.click(within(card).getByRole("button", { name: "Add item" }));
+      expect(within(card).queryByLabelText("Checklist item 4")).not.toBeInTheDocument();
+
+      const first = within(card).getByLabelText("Checklist item 1");
+      await userEvent.clear(first);
+      await userEvent.type(first, "Pick fonts");
+      await userEvent.click(within(card).getByLabelText("Done: checklist item 3"));
+      await userEvent.click(
+        within(card).getByRole("button", { name: "Remove checklist item 2" })
+      );
+      await userEvent.click(within(card).getByRole("button", { name: "Save" }));
+
+      expect(within(card).getByTestId("checklist-progress")).toHaveTextContent(
+        "Checklist 2/2"
+      );
+      await vi.waitFor(() => {
+        const items = persistedBoard.cards["card-5"].checklist;
+        expect(items.map(({ text, done }) => [text, done])).toEqual([
+          ["Pick fonts", true],
+          ["Ship it", true],
+        ]);
+      });
+    });
+
+    it("drops blank items when saving", async () => {
+      render(<KanbanBoard boardId="board-1" />);
+      await screen.findAllByLabelText("Column title");
+      const card = screen.getByTestId("card-card-5");
+      await userEvent.click(
+        within(card).getByRole("button", { name: "Edit Design card layout" })
+      );
+
+      await userEvent.clear(within(card).getByLabelText("Checklist item 2"));
+      await userEvent.click(within(card).getByRole("button", { name: "Save" }));
+
+      await vi.waitFor(() => {
+        expect(persistedBoard.cards["card-5"].checklist).toEqual([
+          { id: "item-1", text: "Pick a type scale", done: true },
+        ]);
+      });
     });
   });
 

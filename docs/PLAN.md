@@ -369,6 +369,33 @@ Completed:
 
 Validation record: 119 backend tests, 102 frontend unit tests (about 93% statement coverage), 21 mocked Playwright tests (repeated 3 times with no failures), and 3 Docker integration tests (the journey now checks the exact activity messages recorded by the real backend) passed, along with lint, `tsc`, and the static build. The demo-board drag test leaves two activity entries (the move and its restore), which are real history.
 
+## Part 16: Card checklists (2026-11-06)
+
+Goal: Break a card into subtasks and show progress at a glance.
+
+Completed:
+- [x] Cards carry a `checklist` of up to 50 `{id, text, done}` items (text trimmed, 1-200 characters, IDs unique within the card). Schema version 5 adds `cards.checklist` (JSON); verified upgrading the real `data/pm.sqlite3` from version 4 with all 10 cards kept.
+- [x] Cards show `Checklist done/total` and their items, which can be checked off directly; the card editor adds (Enter), renames, checks, and removes items, and drops blank ones on save.
+- [x] The activity log reports each toggle (`Checked off "X" on "Card"`, `Unchecked ...`) and other checklist changes as a `checklist` edit.
+- [x] The AI assistant can create cards with checklist items and check items off (`check_item`); unknown cards or items return 502 with nothing saved.
+- [x] Fixed a keyboard accessibility bug found while testing: Space on a checklist checkbox started a card drag instead of toggling it. Root cause (dnd-kit 6.3.1 `KeyboardSensor` activator): it ignores keys from nested elements only when an activator node is registered, and the card never registered one, so Space and Enter on any control inside a card were `preventDefault`ed. The same bug stopped Enter on a card's Edit button from opening the editor (new Playwright test fails without the fix and passes with it). `KanbanCard` now registers the card as its activator node.
+- [x] Coverage is measured over `src/` only; the report had started counting Next.js build chunks and config files.
+
+Validation record: 138 backend tests, 107 frontend unit tests (92% statement coverage over `src/`), 23 mocked Playwright tests, and 3 Docker integration tests (the journey now adds a checklist item, checks it off from the card, and checks the activity messages) passed, along with lint, `tsc`, and the static build.
+
+## Part 17: Archiving cards (2026-11-06)
+
+Goal: Make removing a card reversible.
+
+Completed:
+- [x] Cards carry `archived`. An archived card keeps its place in its column's `cardIds` and is hidden from the board, column counts, WIP limits, filters, and the board list's card count. Schema version 6 adds `cards.archived`; verified upgrading the real `data/pm.sqlite3` from version 5 with all 10 cards kept.
+- [x] A card's Delete button became Archive. The sidebar's new Archived tab (labeled with the count) restores cards to their place or deletes them permanently after a confirmation.
+- [x] The activity log records `Archived card` and `Restored card`; the assistant can archive and restore through `edit_card`, and is told archived cards are hidden and do not count toward WIP limits.
+- [x] Fixed column titles cut to a few letters at 1280px ("Bacl", "Disc", "In"), a regression from the 170px columns in Part 14 found in a screenshot: Delete column moved into the options panel and the decorative dot was removed, so the header holds only the title, count, and options button. The 1280px layout test now also asserts no seeded title is clipped.
+- [x] ESLint ignores generated test reports (`coverage/`, `playwright-report/`, `test-results/`).
+
+Validation record: 143 backend tests, 108 frontend unit tests, 24 mocked Playwright tests (one unexplained failure of the keyboard drag test in one full run, error not captured; 15 isolated repeats and 120 tests across 5 full-suite repeats then passed), and 3 Docker integration tests (the journey now archives a card and checks it is hidden, listed in the Archived tab, logged, and not counted) passed, along with lint, `tsc`, and the static build.
+
 ## Roadmap for later iterations
 
 Each item ships with backend tests, unit tests, and Playwright coverage, plus Docker integration coverage where it touches persistence.
@@ -377,5 +404,7 @@ Each item ships with backend tests, unit tests, and Playwright coverage, plus Do
 2. Done in Part 13.
 3. Done in Part 14.
 4. Done in Part 15.
+5. Card checklists: done in Part 16.
+6. Archiving cards: done in Part 17.
 
-Next candidates: card comments or checklists, archiving cards instead of deleting them, and exporting a board as JSON.
+Next candidates: card comments and exporting a board as JSON.

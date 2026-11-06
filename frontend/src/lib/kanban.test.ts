@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  toggleChecklistItem,
   addDays,
   boardLabels,
   dueStatus,
@@ -78,6 +79,8 @@ describe("card filters", () => {
     priority: null,
     dueDate: null,
     labels: [],
+    checklist: [],
+    archived: false,
     ...fields,
   });
 
@@ -174,5 +177,20 @@ describe("columns", () => {
     ["abc", undefined],
   ])("parses WIP limit %j as %s", (text, expected) => {
     expect(parseWipLimit(text)).toBe(expected);
+  });
+});
+
+describe("toggleChecklistItem", () => {
+  it("flips only the matching item and leaves the input unchanged", () => {
+    const items = [
+      { id: "a", text: "A", done: false },
+      { id: "b", text: "B", done: true },
+    ];
+
+    expect(toggleChecklistItem(items, "b")).toEqual([
+      { id: "a", text: "A", done: false },
+      { id: "b", text: "B", done: false },
+    ]);
+    expect(items[1].done).toBe(true);
   });
 });
